@@ -1,0 +1,17 @@
+{
+  "name": "FORZA",
+  "short_name": "FORZA",
+  "description": "Seguimiento de entrenamiento y progresión de cargas",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F3F5F4",
+  "theme_color": "#2F6B3D",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "img/logo-forza.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

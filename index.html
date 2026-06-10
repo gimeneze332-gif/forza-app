@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <link rel="manifest" href="manifest.json">
+
+<meta name="theme-color" content="#2F6B3D">
+
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        FORZA | Entrenamiento y Salud
+    </title>
+
+<link rel="icon" href="img/logo-forza.png">
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+
+<body>
+
+<!-- ==================================================
+     APP LAYOUT
+================================================== -->
+
+<div class="app-layout">
+
+    <!-- ==================================================
+         SIDEBAR
+    ================================================== -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-header">
+
+      <img
+    src="img/logo-forza.png"
+    alt="FORZA"
+    class="sidebar-logo"
+    >
+        </div>
+
+        <nav>
+
+            <ul>
+
+                <li>
+                    <button
+                        class="menu-btn active"
+                        data-tab="dashboard"
+                    >
+                        📊 Dashboard
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
+                        data-tab="routines"
+                    >
+                        🏋 Rutinas
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
+                        data-tab="training"
+                    >
+                        💪 Entrenamiento
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
+                        data-tab="history"
+                    >
+                        📋 Historial
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
+                        data-tab="statistics"
+                    >
+                        📈 Estadísticas
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
+                        data-tab="body"
+                    >
+                        📏 Corporal
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
+                        data-tab="extras"
+                    >
+                        ⚙ Extras
+                    </button>
+                </li>
+
+            </ul>
+
+        </nav>
+
+    </aside>
+
+    <!-- ==================================================
+         CONTENIDO
+    ================================================== -->
+
+    <main class="main-content">
+
+
+        <!-- ==================================================
+     HEADER SUPERIOR
+================================================== -->
+
+<header class="top-header">
+
+    <div>
+
+        <h1>
+            FORZA
+        </h1>
+
+        <p>
+            Seguimiento de entrenamiento y progresión
+        </p>
+
+    </div>
+
+    <button id="darkModeBtn">
+
+        🌙 Modo Oscuro
+
+    </button>
+
+</header>
+
+<!-- ==================================================
+     DASHBOARD
+================================================== -->
+
+<section
+    id="dashboard"
+    class="tab active-tab"
+>
+
+    <h2 class="section-title">
+
+        Dashboard
+
+    </h2>
+
+    <div class="stats-grid">
+
+        <div class="stat-card">
+
+            <h3>
+                Entrenamientos
+            </h3>
+
+
+            <span
+    id="totalWorkoutsCard"
+    class="stat-number"
+>
+    0
+</span>
+        </div>
+
+        <div class="stat-card">
+
+            <h3>
+                Ejercicios
+            </h3>
+
+            <span
+    id="totalExercisesCard"
+    class="stat-number"
+>
+    0
+</span>
+
+        </div>
+
+        <div class="stat-card">
+
+            <h3>
+                Volumen Total
+            </h3>
+
+           <span
+    id="totalVolumeCard"
+    class="stat-number"
+>
+    0
+</span>
+
+        </div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Entrenamiento del Día
+
+        </h3>
+
+        <div id="todayWorkout"></div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Última Sesión
+
+        </h3>
+
+        <div id="lastWorkout"></div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Récords Personales
+
+        </h3>
+
+        <div id="prContainer"></div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Resumen Semanal
+
+        </h3>
+
+        <p>
+
+            Sesiones:
+            <span id="weeklySessions">
+                0
+            </span>
+
+        </p>
+
+        <p>
+
+            Volumen:
+            <span id="weeklyVolume">
+                0 kg
+            </span>
+
+        </p>
+
+    </div>
+
+</section>
+        <!-- ==================================================
+     RUTINAS
+================================================== -->
+
+<section
+    id="routines"
+    class="tab"
+>
+
+    <h2 class="section-title">
+
+        Rutinas
+
+    </h2>
+
+    <div class="card">
+
+        <label>
+
+            Día
+
+        </label>
+
+        <select id="routineDay">
+
+            <option>Día 1</option>
+            <option>Día 2</option>
+            <option>Día 3</option>
+            <option>Día 4</option>
+
+        </select>
+
+    </div>
+
+    <div class="card">
+
+        <label>
+
+            Nuevo ejercicio
+
+        </label>
+
+        <div class="input-group">
+
+            <input
+                type="text"
+                id="newExercise"
+                placeholder="Ej: Press banca"
+            >
+
+            <button
+                id="addExerciseBtn"
+                class="primary-btn"
+            >
+
+                Agregar
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Ejercicios del día
+
+        </h3>
+
+        <ul id="routineList"></ul>
+
+    </div>
+
+</section>
+<!-- ==================================================
+     ENTRENAMIENTO
+================================================== -->
+
+<section
+    id="training"
+    class="tab"
+>
+
+    <h2 class="section-title">
+
+        Registrar Entrenamiento
+
+    </h2>
+
+    <form id="workoutForm">
+
+        <div class="card">
+
+            <label>Día</label>
+
+            <select id="trainingDay">
+
+                <option>Día 1</option>
+                <option>Día 2</option>
+                <option>Día 3</option>
+                <option>Día 4</option>
+
+            </select>
+
+        </div>
+
+        <div class="card">
+
+            <label>Ejercicio</label>
+
+            <select id="exercise"></select>
+
+        </div>
+
+        <div class="form-grid">
+
+            <div class="card">
+
+                <label>Peso (kg)</label>
+
+                <input
+                    type="number"
+                    id="weight"
+                    required
+                >
+
+            </div>
+
+            <div class="card">
+
+                <label>Series</label>
+
+                <input
+                    type="number"
+                    id="sets"
+                    required
+                >
+
+            </div>
+
+            <div class="card">
+
+                <label>Repeticiones</label>
+
+                <input
+                    type="number"
+                    id="reps"
+                    required
+                >
+
+            </div>
+
+        </div>
+
+        <div class="card">
+
+            <label>Observaciones</label>
+
+            <textarea
+                id="notes"
+                rows="4"
+            ></textarea>
+
+        </div>
+
+        <button
+            type="submit"
+            class="primary-btn full-width"
+        >
+
+            Guardar Entrenamiento
+
+        </button>
+
+    </form>
+
+</section>
+<!-- ==================================================
+     HISTORIAL
+================================================== -->
+
+<section
+    id="history"
+    class="tab"
+>
+
+    <h2 class="section-title">
+
+        Historial
+
+    </h2>
+
+    <div class="filters">
+
+        <input
+            type="text"
+            id="searchExercise"
+            placeholder="Buscar ejercicio"
+        >
+
+        <input
+            type="date"
+            id="searchDate"
+        >
+
+    </div>
+
+    <div class="table-container">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Fecha</th>
+                    <th>Día</th>
+                    <th>Ejercicio</th>
+                    <th>Peso</th>
+                    <th>Series</th>
+                    <th>Reps</th>
+                    <th>Volumen</th>
+                    <th>Acciones</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="historyBody"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+<!-- ==================================================
+     ESTADISTICAS
+================================================== -->
+
+<section
+    id="statistics"
+    class="tab"
+>
+
+    <h2 class="section-title">
+
+        Estadísticas
+
+    </h2>
+
+    <div class="card">
+
+        <label>
+
+            Seleccionar ejercicio
+
+        </label>
+
+        <select id="exerciseFilter">
+
+            <option value="">
+                Seleccionar ejercicio
+            </option>
+
+        </select>
+
+    </div>
+
+    <div
+        class="card"
+        id="selectedExerciseInfo"
+    ></div>
+
+    <div class="chart-card">
+
+        <canvas id="progressChart"></canvas>
+
+    </div>
+
+</section>
+<!-- ==================================================
+     CORPORAL
+================================================== -->
+
+<section
+    id="body"
+    class="tab"
+>
+
+    <h2 class="section-title">
+
+        Seguimiento Corporal
+
+    </h2>
+
+    <form id="bodyForm">
+
+        <div class="form-grid">
+
+            <input
+                type="number"
+                id="bodyWeight"
+                placeholder="Peso corporal"
+            >
+
+            <input
+                type="number"
+                id="arm"
+                placeholder="Brazo"
+            >
+
+            <input
+                type="number"
+                id="chest"
+                placeholder="Pecho"
+            >
+
+            <input
+                type="number"
+                id="waist"
+                placeholder="Cintura"
+            >
+
+            <input
+                type="number"
+                id="leg"
+                placeholder="Pierna"
+            >
+
+        </div>
+
+        <button
+            type="submit"
+            class="primary-btn full-width"
+        >
+
+            Guardar Medidas
+
+        </button>
+
+    </form>
+
+    <div class="table-container">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Fecha</th>
+                    <th>Peso</th>
+                    <th>Brazo</th>
+                    <th>Pecho</th>
+                    <th>Cintura</th>
+                    <th>Pierna</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="bodyHistoryBody"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+<!-- ==================================================
+     EXTRAS
+================================================== -->
+
+<section
+    id="extras"
+    class="tab"
+>
+
+    <h2 class="section-title">
+
+        Extras
+
+    </h2>
+
+    <div class="card">
+
+        <h3>
+
+            Objetivo de Peso
+
+        </h3>
+
+        <input
+            type="number"
+            id="goalWeight"
+            placeholder="Peso objetivo"
+        >
+
+        <button
+            id="saveGoalBtn"
+            class="primary-btn"
+        >
+
+            Guardar Objetivo
+
+        </button>
+
+        <div class="goal-container">
+
+            <div
+                id="goalProgressBar"
+                class="goal-progress"
+            ></div>
+
+        </div>
+
+        <p id="goalProgressText"></p>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Temporizador de Descanso
+
+        </h3>
+
+        <div id="timerDisplay">
+
+            1:30
+
+        </div>
+
+        <div class="button-group">
+
+            <button
+                id="startTimer"
+                class="primary-btn"
+            >
+
+                Iniciar
+
+            </button>
+
+            <button
+                id="resetTimer"
+                class="secondary-btn"
+            >
+
+                Reiniciar
+
+            </button>
+
+        </div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+
+            Exportar Datos
+
+        </h3>
+
+        <button
+            id="exportCSV"
+            class="primary-btn"
+        >
+
+            Exportar CSV
+
+        </button>
+
+        <button
+            id="backupJSON"
+            class="secondary-btn"
+        >
+
+            Backup JSON
+
+        </button>
+
+        <input
+            type="file"
+            id="restoreBackup"
+            accept=".json"
+        >
+
+    </div>
+
+</section>
+
+    </main>
+
+</div>
+
+<script src="script.js"></script>
+<script>
+
+if ("serviceWorker" in navigator) {
+
+    window.addEventListener("load", () => {
+
+        navigator.serviceWorker.register("sw.js")
+        .then(() => {
+
+            console.log("Service Worker registrado");
+
+        });
+
+    });
+
+}
+
+</script>
+
+</body>
+</html>
