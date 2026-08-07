@@ -293,41 +293,12 @@
 
     <!-- Nutrition es un complemento aislado del módulo Gym. -->
     <article id="nutrition-card" class="nutrition-card" aria-labelledby="nutrition-card-title">
-        <div class="nutrition-card-header">
-            <div>
-                <p class="nutrition-eyebrow">Hoy</p>
-                <h3 id="nutrition-card-title">Nutrición</h3>
-            </div>
-            <span id="nutrition-status" class="nutrition-status">Sin configurar</span>
-        </div>
+        <h3 id="nutrition-card-title">Nutrición de hoy</h3>
 
         <div class="nutrition-metrics">
-            <div class="nutrition-metric">
-                <div class="nutrition-metric-label">
-                    <span>Calorías</span>
-                    <strong id="nutrition-calories">0 kcal</strong>
-                </div>
-                <div class="nutrition-progress"><div id="nutrition-calories-bar"></div></div>
-                <small id="nutrition-calories-target">Objetivo pendiente</small>
-            </div>
-
-            <div class="nutrition-metric">
-                <div class="nutrition-metric-label">
-                    <span>Proteína</span>
-                    <strong id="nutrition-protein">0 g</strong>
-                </div>
-                <div class="nutrition-progress"><div id="nutrition-protein-bar"></div></div>
-                <small id="nutrition-protein-target">Objetivo pendiente</small>
-            </div>
-
-            <div class="nutrition-metric">
-                <div class="nutrition-metric-label">
-                    <span>Agua</span>
-                    <strong id="nutrition-water">0 ml</strong>
-                </div>
-                <div class="nutrition-progress"><div id="nutrition-water-bar"></div></div>
-                <small id="nutrition-water-target">Objetivo pendiente</small>
-            </div>
+            <p><span aria-hidden="true">🔥</span> <strong id="nutrition-calories">0 kcal</strong></p>
+            <p><span aria-hidden="true">🥩</span> <strong id="nutrition-protein">0 g</strong></p>
+            <p><span aria-hidden="true">💧</span> <strong id="nutrition-water">0 ml</strong></p>
         </div>
 
         <button id="nutrition-open" class="nutrition-primary-button" type="button">
@@ -1077,6 +1048,8 @@
         <p id="nutrition-feedback" class="nutrition-feedback" role="status" aria-live="polite"></p>
     </section>
 </div>
+
+<p id="nutrition-toast" class="nutrition-toast" role="status" aria-live="polite" aria-atomic="true"></p>
 
 <script src="script.js"></script>
 <script src="nutrition.js"></script>

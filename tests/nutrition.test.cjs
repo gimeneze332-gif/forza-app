@@ -112,5 +112,10 @@ assert.ok(
     html.indexOf('<script src="script.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'),
     "Gym inicia antes que el complemento Nutrition"
 );
+assert.match(html, /id="nutrition-toast"[^>]+aria-live="polite"/);
+assert.ok(html.includes("Nutrici\u00f3n de hoy"));
+assert.equal(html.includes('id="nutrition-status"'), false);
+assert.ok(source.includes("+250 ml"));
+assert.ok(source.includes("Comida registrada"));
 
 console.log("FORZA Nutrition tests: OK");

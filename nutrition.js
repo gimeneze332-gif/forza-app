@@ -29,6 +29,9 @@
     let settings = null;
     let draft = null;
     let el = null;
+    let closeTimer = null;
+    let toastTimer = null;
+    let returnFocus = null;
 
     function normalizeText(value) {
         return String(value || "").normalize("NFD")
@@ -166,25 +169,24 @@
         return [...unique.values()].slice(0, 8);
     }
 
-    function setBar(node, value, goal) {
-        node.style.width = `${goal > 0 ? Math.min(100, value / goal * 100) : 0}%`;
-    }
-
     function renderCard() {
         const totals = calculateDailyTotals();
-        const status = getDailyStatus(totals, settings);
-        el.status.textContent = status.label;
-        el.status.className = `nutrition-status ${status.tone}`.trim();
-        el.calories.textContent = `${totals.calories.toLocaleString("es-AR")} kcal`;
-        el.protein.textContent = `${totals.protein.toLocaleString("es-AR")} g`;
-        el.water.textContent = `${totals.water.toLocaleString("es-AR")} ml`;
-        const configured = Boolean(settings);
-        el.caloriesTarget.textContent = configured ? `de ${settings.calories.toLocaleString("es-AR")} kcal` : "Objetivo pendiente";
-        el.proteinTarget.textContent = configured ? `de ${settings.protein.toLocaleString("es-AR")} g` : "Objetivo pendiente";
-        el.waterTarget.textContent = configured ? `de ${settings.water.toLocaleString("es-AR")} ml` : "Objetivo pendiente";
-        setBar(el.caloriesBar, totals.calories, configured ? settings.calories : 1);
-        setBar(el.proteinBar, totals.protein, configured ? settings.protein : 1);
-        setBar(el.waterBar, totals.water, configured ? settings.water : 1);
+        const target = (value, goal, unit) => settings
+            ? `${value.toLocaleString("es-AR")} / ${goal.toLocaleString("es-AR")} ${unit}`
+            : `${value.toLocaleString("es-AR")} ${unit} / objetivo pendiente`;
+        el.calories.textContent = target(totals.calories, settings?.calories, "kcal");
+        el.protein.textContent = target(totals.protein, settings?.protein, "g");
+        el.water.textContent = target(totals.water, settings?.water, "ml");
+    }
+
+    function announce(message) {
+        window.clearTimeout(toastTimer);
+        el.toast.textContent = message;
+        el.toast.classList.add("show");
+        toastTimer = window.setTimeout(() => {
+            el.toast.classList.remove("show");
+            window.setTimeout(() => { el.toast.textContent = ""; }, 180);
+        }, 1800);
     }
 
     function show(view) {
@@ -195,18 +197,31 @@
     }
 
     function open() {
+        window.clearTimeout(closeTimer);
+        returnFocus = document.activeElement;
         el.modal.hidden = false;
         document.body.style.overflow = "hidden";
         el.feedback.textContent = "";
         show(settings ? "entry" : "setup");
-        if (settings) { renderFrequent(); el.mealText.focus(); }
-        else el.calorieGoal.focus();
+        window.requestAnimationFrame(() => {
+            el.modal.classList.add("is-open");
+            window.setTimeout(() => {
+                if (settings) entryMode("text");
+                else el.calorieGoal.focus();
+            }, 180);
+        });
     }
 
     function close() {
-        el.modal.hidden = true;
+        if (el.modal.hidden) return;
+        el.modal.classList.remove("is-open");
         document.body.style.overflow = "";
         draft = null;
+        closeTimer = window.setTimeout(() => {
+            el.modal.hidden = true;
+            if (returnFocus && typeof returnFocus.focus === "function") returnFocus.focus();
+            returnFocus = null;
+        }, 220);
     }
 
     function entryMode(mode) {
@@ -236,7 +251,7 @@
             button.appendChild(detail);
             button.addEventListener("click", () => {
                 saveMeal({ ...meal, source: "frequent", isFavorite: true });
-                renderCard(); close();
+                renderCard(); close(); announce("✓ Comida registrada");
             });
             el.frequentList.appendChild(button);
         });
@@ -271,7 +286,8 @@
         if (Object.values(values).some(value => !Number.isFinite(value) || value <= 0)) {
             el.feedback.textContent = "Completá los tres objetivos."; return;
         }
-        settings = values; write(STORAGE.settings, settings); renderCard(); show("entry"); el.mealText.focus();
+        settings = values; write(STORAGE.settings, settings); renderCard(); show("entry");
+        announce("✓ Objetivos guardados"); el.mealText.focus();
     }
 
     function saveReviewed(event) {
@@ -283,7 +299,7 @@
             carbs: el.reviewCarbs.value, fat: el.reviewFat.value,
             source: "text", isFavorite: el.reviewFavorite.checked
         });
-        el.mealText.value = ""; renderCard(); close();
+        el.mealText.value = ""; renderCard(); close(); announce("✓ Comida registrada");
     }
 
     function collect() {
@@ -297,9 +313,7 @@
             frequentList: get("frequent-list"), reviewBack: get("review-back"), originalText: get("original-text"), recognitionNote: get("recognition-note"),
             saveForm: get("save-form"), reviewCalories: get("review-calories"), reviewProtein: get("review-protein"),
             reviewCarbs: get("review-carbs"), reviewFat: get("review-fat"), reviewFavorite: get("review-favorite"), feedback: get("feedback"),
-            status: get("status"), calories: get("calories"), protein: get("protein"), water: get("water"),
-            caloriesTarget: get("calories-target"), proteinTarget: get("protein-target"), waterTarget: get("water-target"),
-            caloriesBar: get("calories-bar"), proteinBar: get("protein-bar"), waterBar: get("water-bar")
+            calories: get("calories"), protein: get("protein"), water: get("water"), toast: get("toast")
         };
     }
 
@@ -319,7 +333,7 @@
             el.waterGoal.value = settings?.water || "";
             show("setup");
         });
-        el.addWater.addEventListener("click", () => { addWater(250); renderCard(); el.feedback.textContent = "+250 ml registrados."; });
+        el.addWater.addEventListener("click", () => { addWater(250); renderCard(); announce("✓ +250 ml"); });
         el.optionButtons.forEach(button => button.addEventListener("click", () => entryMode(button.dataset.nutritionView)));
         el.review.addEventListener("click", review);
         el.reviewBack.addEventListener("click", () => show("entry"));
