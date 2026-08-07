@@ -624,13 +624,13 @@
 
     </h2>
 
-    <div class="card">
+    <div class="card statistics-controls">
+
+        <div class="filters">
 
         <label>
 
             Seleccionar ejercicio
-
-        </label>
 
         <select id="exerciseFilter">
 
@@ -639,6 +639,35 @@
             </option>
 
         </select>
+
+        </label>
+
+        <label>
+
+            Período
+
+            <select id="statisticsPeriod">
+                <option value="all">Todo el historial</option>
+                <option value="30">Últimos 30 días</option>
+                <option value="90">Últimos 90 días</option>
+                <option value="365">Último año</option>
+            </select>
+
+        </label>
+
+        <label>
+
+            Gráfico
+
+            <select id="statisticsMetric">
+                <option value="weight">Peso</option>
+                <option value="volume">Volumen</option>
+                <option value="oneRM">1RM estimado</option>
+            </select>
+
+        </label>
+
+        </div>
 
     </div>
 

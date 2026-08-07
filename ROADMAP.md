@@ -28,6 +28,8 @@ Criterio de salida: cualquier sesión histórica se encuentra en dos toques y lo
 
 ## Fase 2 — Progreso por ejercicio
 
+Estado: implementado en `v6.2`, pendiente de validación final en iPhone.
+
 - Normalizar nombres de ejercicios para evitar estadísticas partidas por mayúsculas o espacios.
 - Mostrar mejor peso, mejor serie, mejor volumen, 1RM estimado y promedio.
 - Gráficos por peso, volumen y 1RM con rangos semanal, mensual y total.

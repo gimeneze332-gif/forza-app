@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.1
+   FORZA V6.2
    GYM TRACKER
 ================================================== */
 
@@ -189,6 +189,12 @@ document.getElementById("exerciseFilter");
 const selectedExerciseInfo =
 document.getElementById("selectedExerciseInfo");
 
+const statisticsPeriod =
+document.getElementById("statisticsPeriod");
+
+const statisticsMetric =
+document.getElementById("statisticsMetric");
+
 /* ==================================================
    CORPORAL
 ================================================== */
@@ -334,6 +340,23 @@ function calculate1RM(
 
         (1 + reps / 30)
 
+    );
+
+}
+
+function escapeHTML(value) {
+
+    const entities = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+    };
+
+    return String(value ?? "").replace(
+        /[&<>"']/g,
+        character => entities[character]
     );
 
 }
@@ -1653,23 +1676,68 @@ if (searchDate) {
    FILTRO ESTADISTICAS
 ================================================== */
 
+function normalizeExerciseName(value) {
+
+    return String(value || "")
+        .trim()
+        .toLocaleLowerCase("es-AR");
+
+}
+
+function getSelectedExerciseRecords(applyPeriod = true) {
+
+    const selectedExercise = exerciseFilter?.value;
+
+    if (!selectedExercise) return [];
+
+    let records = workouts.filter(
+        workout => normalizeExerciseName(workout.exercise) === selectedExercise
+    );
+
+    if (applyPeriod && statisticsPeriod?.value !== "all") {
+
+        const days = Number(statisticsPeriod.value);
+        const limit = new Date();
+        limit.setHours(0, 0, 0, 0);
+        limit.setDate(limit.getDate() - days + 1);
+
+        records = records.filter(workout => {
+
+            const date = parseWorkoutDate(workout.date);
+            return date && date >= limit;
+
+        });
+
+    }
+
+    return records.slice().sort((first, second) => {
+
+        const firstDate = parseWorkoutDate(first.date)?.getTime() || 0;
+        const secondDate = parseWorkoutDate(second.date)?.getTime() || 0;
+        return firstDate - secondDate;
+
+    });
+
+}
+
 function updateExerciseFilter() {
 
     if (!exerciseFilter) return;
 
-    const exercises = [
+    const currentSelection = exerciseFilter.value;
+    const exercises = new Map();
 
-        ...new Set(
+    workouts.forEach(workout => {
 
-            workouts.map(
+        const normalizedName = normalizeExerciseName(workout.exercise);
 
-                item => item.exercise
+        if (normalizedName && !exercises.has(normalizedName)) {
 
-            )
+            exercises.set(normalizedName, String(workout.exercise).trim());
 
-        )
+        }
 
-    ];
+    });
 
     exerciseFilter.innerHTML = `
         <option value="">
@@ -1677,15 +1745,24 @@ function updateExerciseFilter() {
         </option>
     `;
 
-    exercises.forEach(exercise => {
+    [...exercises.entries()]
+        .sort((first, second) => first[1].localeCompare(second[1], "es-AR"))
+        .forEach(([value, label]) => {
 
-        exerciseFilter.innerHTML += `
-            <option value="${exercise}">
-                ${exercise}
-            </option>
-        `;
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            exerciseFilter.appendChild(option);
 
-    });
+        });
+
+    const normalizedSelection = normalizeExerciseName(currentSelection);
+
+    if (exercises.has(normalizedSelection)) {
+
+        exerciseFilter.value = normalizedSelection;
+
+    }
 
 }
 
@@ -1702,58 +1779,103 @@ function updateExerciseInfo() {
         return;
     }
 
-    const exercise =
-        exerciseFilter.value;
+    const records = getSelectedExerciseRecords();
 
-    if (!exercise) {
+    if (!exerciseFilter.value) {
 
         selectedExerciseInfo.innerHTML = "";
 
         return;
     }
 
-    const records = workouts.filter(
+    if (records.length === 0) {
 
-        item =>
-            item.exercise === exercise
+        selectedExerciseInfo.innerHTML = `
+            <p>No hay registros de este ejercicio en el período seleccionado.</p>
+        `;
+        return;
 
-    );
+    }
 
-    const maxWeight = Math.max(
+    const exercise = String(records[0].exercise).trim();
+    const maxWeight = Math.max(...records.map(item => Number(item.weight || 0)));
+    const maxVolume = Math.max(...records.map(item => Number(item.volume || 0)));
+    const maxOneRM = Math.max(...records.map(item =>
+        calculate1RM(Number(item.weight || 0), Number(item.reps || 0))
+    ));
+    const averageWeight = records.reduce(
+        (total, item) => total + Number(item.weight || 0),
+        0
+    ) / records.length;
+    const bestSet = records.reduce((best, item) => {
 
-        ...records.map(
-            item => item.weight
-        )
+        const score = calculate1RM(
+            Number(item.weight || 0),
+            Number(item.reps || 0)
+        );
+        const bestScore = calculate1RM(
+            Number(best.weight || 0),
+            Number(best.reps || 0)
+        );
 
-    );
+        return score > bestScore || (
+            score === bestScore && Number(item.weight) > Number(best.weight)
+        ) ? item : best;
 
-    const maxVolume = Math.max(
-
-        ...records.map(
-            item => item.volume
-        )
-
-    );
+    }, records[0]);
+    const firstWeight = Number(records[0].weight || 0);
+    const lastWeight = Number(records[records.length - 1].weight || 0);
+    const variation = firstWeight > 0
+        ? ((lastWeight - firstWeight) / firstWeight) * 100
+        : 0;
+    const variationClass = variation > 0
+        ? "positive"
+        : variation < 0
+            ? "negative"
+            : "neutral";
 
     selectedExerciseInfo.innerHTML = `
-        <div class="stat-box">
+        <div class="exercise-progress-header">
+            <div>
+                <p class="exercise-progress-label">Progreso de</p>
+                <h3>${escapeHTML(exercise)}</h3>
+            </div>
+            <span class="exercise-record-count">
+                ${records.length} registro${records.length === 1 ? "" : "s"}
+            </span>
+        </div>
 
-            <h4>${exercise}</h4>
-
-            <p>
-                PR:
-                <strong>
-                    ${maxWeight} kg
+        <div class="exercise-stats-grid">
+            <div class="exercise-stat">
+                <span>PR de peso</span>
+                <strong>${maxWeight.toLocaleString("es-AR")} kg</strong>
+            </div>
+            <div class="exercise-stat">
+                <span>Mejor serie</span>
+                <strong>${bestSet.weight} kg × ${bestSet.reps}</strong>
+            </div>
+            <div class="exercise-stat">
+                <span>Mejor volumen</span>
+                <strong>${maxVolume.toLocaleString("es-AR")} kg</strong>
+            </div>
+            <div class="exercise-stat">
+                <span>1RM estimado</span>
+                <strong>${maxOneRM.toLocaleString("es-AR")} kg</strong>
+            </div>
+            <div class="exercise-stat">
+                <span>Peso promedio</span>
+                <strong>${averageWeight.toLocaleString("es-AR", {
+                    maximumFractionDigits: 1
+                })} kg</strong>
+            </div>
+            <div class="exercise-stat">
+                <span>Evolución del período</span>
+                <strong class="${variationClass}">
+                    ${variation > 0 ? "+" : ""}${variation.toLocaleString("es-AR", {
+                        maximumFractionDigits: 1
+                    })}%
                 </strong>
-            </p>
-
-            <p>
-                Mejor volumen:
-                <strong>
-                    ${maxVolume}
-                </strong>
-            </p>
-
+            </div>
         </div>
     `;
 
@@ -1772,8 +1894,7 @@ function updateProgressChart() {
 
     if (!canvas) return;
 
-    const exercise =
-    exerciseFilter?.value;
+    const exercise = exerciseFilter?.value;
 
     if (!exercise) {
 
@@ -1788,13 +1909,7 @@ function updateProgressChart() {
         return;
     }
 
-    const data = workouts.filter(
-
-        item =>
-
-        item.exercise === exercise
-
-    );
+    const data = getSelectedExerciseRecords();
 
     const labels =
 
@@ -1802,15 +1917,34 @@ function updateProgressChart() {
         item => item.date
     );
 
-    const weights =
-
-    data.map(
-        item => item.weight
-    );
+    const metric = statisticsMetric?.value || "weight";
+    const metricConfig = {
+        weight: {
+            label: "Peso (kg)",
+            values: data.map(item => Number(item.weight || 0))
+        },
+        volume: {
+            label: "Volumen (kg)",
+            values: data.map(item => Number(item.volume || 0))
+        },
+        oneRM: {
+            label: "1RM estimado (kg)",
+            values: data.map(item =>
+                calculate1RM(Number(item.weight || 0), Number(item.reps || 0))
+            )
+        }
+    }[metric];
 
     if (progressChart) {
 
         progressChart.destroy();
+
+    }
+
+    if (typeof Chart === "undefined") {
+
+        console.warn("Chart.js no está disponible.");
+        return;
 
     }
 
@@ -1830,10 +1964,17 @@ function updateProgressChart() {
 
                     {
 
-                        label:
-                        "Peso",
+                        label: metricConfig.label,
 
-                        data: weights,
+                        data: metricConfig.values,
+
+                        borderColor: "#2F6B3D",
+
+                        backgroundColor: "rgba(47, 107, 61, .15)",
+
+                        pointBackgroundColor: "#2F6B3D",
+
+                        fill: true,
 
                         tension: 0.3
 
@@ -1847,7 +1988,18 @@ function updateProgressChart() {
 
                 responsive: true,
 
-                maintainAspectRatio: false
+                maintainAspectRatio: false,
+
+                interaction: {
+                    intersect: false,
+                    mode: "index"
+                },
+
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
 
             }
 
@@ -1876,6 +2028,23 @@ if (exerciseFilter) {
         }
 
     );
+
+}
+
+if (statisticsPeriod) {
+
+    statisticsPeriod.addEventListener("change", () => {
+
+        updateExerciseInfo();
+        updateProgressChart();
+
+    });
+
+}
+
+if (statisticsMetric) {
+
+    statisticsMetric.addEventListener("change", updateProgressChart);
 
 }
 /* ==================================================

@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.1
+   FORZA V6.2
 ================================================== */
 
 :root{
@@ -728,6 +728,85 @@ tbody tr:hover{
    CHART CARD
 ================================================== */
 
+.statistics-controls .filters{
+    margin-bottom:0;
+}
+
+.statistics-controls label{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.exercise-progress-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:18px;
+    margin-bottom:24px;
+}
+
+.exercise-progress-header h3{
+    margin:0;
+    font-size:28px;
+}
+
+.exercise-progress-label{
+    margin-bottom:5px;
+    color:#6B7280;
+    font-size:13px;
+    font-weight:800;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+}
+
+.exercise-record-count{
+    padding:9px 13px;
+    border-radius:999px;
+    background:rgba(47, 107, 61, .1);
+    color:var(--primary);
+    font-size:13px;
+    font-weight:800;
+    white-space:nowrap;
+}
+
+.exercise-stats-grid{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:14px;
+}
+
+.exercise-stat{
+    padding:18px;
+    border:1px solid #E5E7EB;
+    border-radius:18px;
+}
+
+.exercise-stat span{
+    display:block;
+    margin-bottom:8px;
+    color:#6B7280;
+    font-size:13px;
+    font-weight:700;
+}
+
+.exercise-stat strong{
+    color:var(--text);
+    font-size:20px;
+}
+
+.exercise-stat strong.positive{
+    color:#16803A;
+}
+
+.exercise-stat strong.negative{
+    color:#C0392B;
+}
+
+.exercise-stat strong.neutral{
+    color:#6B7280;
+}
+
 .chart-card{
 
     background:var(--card);
@@ -1175,6 +1254,10 @@ body.dark-mode input[type="file"]{
         grid-template-columns:1fr;
     }
 
+    .exercise-stats-grid{
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+    }
+
     .sidebar{
         width:260px;
     }
@@ -1301,6 +1384,15 @@ body.dark-mode input[type="file"]{
 
 @media(max-width:480px){
 
+    .exercise-progress-header{
+        align-items:flex-start;
+        flex-direction:column;
+    }
+
+    .exercise-stats-grid{
+        grid-template-columns:1fr;
+    }
+
     .calendar-weekdays,
     .calendar-grid{
         gap:4px;
@@ -1380,4 +1472,30 @@ body.dark-mode .calendar-session{
 
 body.dark-mode .calendar-session strong{
     color:#7DD88F;
+}
+
+body.dark-mode .exercise-progress-label,
+body.dark-mode .exercise-stat span{
+    color:#CBD5E1;
+}
+
+body.dark-mode .exercise-record-count{
+    background:rgba(125, 185, 106, .18);
+    color:#C7F9CC;
+}
+
+body.dark-mode .exercise-stat{
+    border-color:#4B5563;
+}
+
+body.dark-mode .exercise-stat strong{
+    color:#F3F4F6;
+}
+
+body.dark-mode .exercise-stat strong.positive{
+    color:#7DD88F;
+}
+
+body.dark-mode .exercise-stat strong.negative{
+    color:#FCA5A5;
 }

@@ -86,6 +86,8 @@ assert.equal(existingData.context.getTotalWorkouts(), 1);
 assert.equal(existingData.context.getTotalVolume(), 2560);
 assert.equal(existingData.context.isNewPR("Press banca", 82.5), true);
 assert.equal(existingData.context.isNewPR("Press banca", 80), false);
+assert.equal(existingData.context.normalizeExerciseName("  PRESS BANCA "), "press banca");
+assert.equal(existingData.context.escapeHTML("<Press & banca>"), "&lt;Press &amp; banca&gt;");
 assert.equal(existingData.context.getWorkoutsByDate("07/08/2026").length, 1);
 assert.equal(existingData.context.getWorkoutsByDate("08/08/2026").length, 0);
 assert.equal(existingData.context.formatCalendarDate(2026, 7, 7), "7/8/2026");
