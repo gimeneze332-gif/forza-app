@@ -30,6 +30,11 @@
         href="style.css"
     >
 
+    <link
+        rel="stylesheet"
+        href="nutrition.css"
+    >
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 </head>
@@ -285,6 +290,50 @@
         </div>
 
     </div>
+
+    <!-- Nutrition es un complemento aislado del módulo Gym. -->
+    <article id="nutrition-card" class="nutrition-card" aria-labelledby="nutrition-card-title">
+        <div class="nutrition-card-header">
+            <div>
+                <p class="nutrition-eyebrow">Hoy</p>
+                <h3 id="nutrition-card-title">Nutrición</h3>
+            </div>
+            <span id="nutrition-status" class="nutrition-status">Sin configurar</span>
+        </div>
+
+        <div class="nutrition-metrics">
+            <div class="nutrition-metric">
+                <div class="nutrition-metric-label">
+                    <span>Calorías</span>
+                    <strong id="nutrition-calories">0 kcal</strong>
+                </div>
+                <div class="nutrition-progress"><div id="nutrition-calories-bar"></div></div>
+                <small id="nutrition-calories-target">Objetivo pendiente</small>
+            </div>
+
+            <div class="nutrition-metric">
+                <div class="nutrition-metric-label">
+                    <span>Proteína</span>
+                    <strong id="nutrition-protein">0 g</strong>
+                </div>
+                <div class="nutrition-progress"><div id="nutrition-protein-bar"></div></div>
+                <small id="nutrition-protein-target">Objetivo pendiente</small>
+            </div>
+
+            <div class="nutrition-metric">
+                <div class="nutrition-metric-label">
+                    <span>Agua</span>
+                    <strong id="nutrition-water">0 ml</strong>
+                </div>
+                <div class="nutrition-progress"><div id="nutrition-water-bar"></div></div>
+                <small id="nutrition-water-target">Objetivo pendiente</small>
+            </div>
+        </div>
+
+        <button id="nutrition-open" class="nutrition-primary-button" type="button">
+            Registrar comida
+        </button>
+    </article>
 
 </section>
         <!-- ==================================================
@@ -930,7 +979,107 @@
 
 </div>
 
+<!-- Panel independiente de Nutrition. -->
+<div id="nutrition-modal" class="nutrition-modal" hidden>
+    <button
+        id="nutrition-backdrop"
+        class="nutrition-backdrop"
+        type="button"
+        aria-label="Cerrar Nutrition"
+    ></button>
+
+    <section
+        class="nutrition-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="nutrition-sheet-title"
+    >
+        <div class="nutrition-sheet-handle" aria-hidden="true"></div>
+
+        <header class="nutrition-sheet-header">
+            <div>
+                <p class="nutrition-eyebrow">Registro rápido</p>
+                <h2 id="nutrition-sheet-title">Registrar comida</h2>
+            </div>
+            <button id="nutrition-close" class="nutrition-icon-button" type="button" aria-label="Cerrar">×</button>
+        </header>
+
+        <div id="nutrition-setup" class="nutrition-view" hidden>
+            <p class="nutrition-intro">Configurá tus objetivos una sola vez.</p>
+            <form id="nutrition-settings-form">
+                <label>Calorías diarias
+                    <input id="nutrition-calorie-goal" type="number" min="1" inputmode="numeric" required>
+                </label>
+                <label>Proteína diaria (g)
+                    <input id="nutrition-protein-goal" type="number" min="1" inputmode="decimal" required>
+                </label>
+                <label>Agua diaria (ml)
+                    <input id="nutrition-water-goal" type="number" min="250" step="250" inputmode="numeric" required>
+                </label>
+                <button class="nutrition-primary-button" type="submit">Guardar objetivos</button>
+            </form>
+        </div>
+
+        <div id="nutrition-entry" class="nutrition-view" hidden>
+            <div class="nutrition-quick-row">
+                <button id="nutrition-add-water" class="nutrition-water-button" type="button">💧 +250 ml</button>
+                <button id="nutrition-edit-goals" class="nutrition-text-button" type="button">Editar objetivos</button>
+            </div>
+
+            <div class="nutrition-option-row" role="group" aria-label="Tipo de registro">
+                <button class="nutrition-option active" type="button" data-nutrition-view="text">Escribir</button>
+                <button class="nutrition-option" type="button" data-nutrition-view="frequent">Frecuentes</button>
+                <button class="nutrition-option" type="button" disabled>Foto · Próximamente</button>
+            </div>
+
+            <div id="nutrition-text-view">
+                <label for="nutrition-meal-text">¿Qué comiste?</label>
+                <textarea
+                    id="nutrition-meal-text"
+                    rows="3"
+                    placeholder="Ej.: 2 huevos, banana y yogur"
+                ></textarea>
+                <button id="nutrition-review" class="nutrition-primary-button" type="button">Revisar</button>
+            </div>
+
+            <div id="nutrition-frequent-view" hidden>
+                <div id="nutrition-frequent-list" class="nutrition-frequent-list"></div>
+            </div>
+        </div>
+
+        <div id="nutrition-review-view" class="nutrition-view" hidden>
+            <button id="nutrition-review-back" class="nutrition-text-button" type="button">← Volver</button>
+            <h3>Revisá antes de guardar</h3>
+            <p id="nutrition-original-text" class="nutrition-original-text"></p>
+            <div id="nutrition-recognition-note" class="nutrition-recognition-note"></div>
+
+            <form id="nutrition-save-form" class="nutrition-review-form">
+                <label>Calorías
+                    <input id="nutrition-review-calories" type="number" min="0" inputmode="decimal" required>
+                </label>
+                <label>Proteína (g)
+                    <input id="nutrition-review-protein" type="number" min="0" step="0.1" inputmode="decimal" required>
+                </label>
+                <label>Carbohidratos (g) · opcional
+                    <input id="nutrition-review-carbs" type="number" min="0" step="0.1" inputmode="decimal">
+                </label>
+                <label>Grasas (g) · opcional
+                    <input id="nutrition-review-fat" type="number" min="0" step="0.1" inputmode="decimal">
+                </label>
+                <label class="nutrition-favorite-check">
+                    <input id="nutrition-review-favorite" type="checkbox">
+                    Guardar como comida frecuente
+                </label>
+                <button class="nutrition-primary-button" type="submit">Guardar comida</button>
+            </form>
+        </div>
+
+        <p id="nutrition-feedback" class="nutrition-feedback" role="status" aria-live="polite"></p>
+    </section>
+</div>
+
 <script src="script.js"></script>
+<script src="nutrition.js"></script>
 <script>
 
 if ("serviceWorker" in navigator) {

@@ -1,10 +1,12 @@
-const CACHE_NAME = "forza-v6-backup-safety-1";
+const CACHE_NAME = "forza-v2-nutrition-1";
 
 const urlsToCache = [
   "./",
   "./index.html",
   "./style.css",
   "./script.js",
+  "./nutrition.css",
+  "./nutrition.js",
   "./manifest.json",
   "./img/logo-forza.png"
 ];
