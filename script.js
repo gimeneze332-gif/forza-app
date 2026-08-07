@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V5
+   FORZA V6.0
    GYM TRACKER
 ================================================== */
 
@@ -21,15 +21,31 @@ const STORAGE = {
    DATA
 ================================================== */
 
+function readStorage(key, fallback) {
+
+    try {
+
+        const storedValue = localStorage.getItem(key);
+
+        return storedValue === null
+            ? fallback
+            : JSON.parse(storedValue);
+
+    } catch (error) {
+
+        console.warn(`No se pudo leer ${key}. El resto de la app seguirá disponible.`, error);
+
+        return fallback;
+
+    }
+
+}
+
 let workouts =
-JSON.parse(
-    localStorage.getItem(STORAGE.workouts)
-) || [];
+readStorage(STORAGE.workouts, []);
 
 let routines =
-JSON.parse(
-    localStorage.getItem(STORAGE.routines)
-) || {
+readStorage(STORAGE.routines, null) || {
 
     "Día 1": [],
     "Día 2": [],
@@ -39,14 +55,10 @@ JSON.parse(
 };
 
 let bodyMeasurements =
-JSON.parse(
-    localStorage.getItem(STORAGE.body)
-) || [];
+readStorage(STORAGE.body, []);
 
 let goalWeight =
-JSON.parse(
-    localStorage.getItem(STORAGE.goal)
-) || null;
+readStorage(STORAGE.goal, null);
 
 /* ==================================================
    GLOBALS
@@ -259,6 +271,21 @@ function getTodayDate() {
 
     return new Date()
     .toLocaleDateString("es-AR");
+
+}
+
+function parseWorkoutDate(value) {
+
+    if (typeof value !== "string") return null;
+
+    const parts = value.split("/").map(Number);
+
+    if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+
+    const [day, month, year] = parts;
+    const date = new Date(year, month - 1, day);
+
+    return Number.isNaN(date.getTime()) ? null : date;
 
 }
 
@@ -1232,14 +1259,26 @@ function updateWeeklySummary(){
         return;
     }
 
-    weeklySessions.textContent =
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    const mondayOffset = (now.getDay() + 6) % 7;
 
-    workouts.length;
+    startOfWeek.setHours(0, 0, 0, 0);
+    startOfWeek.setDate(startOfWeek.getDate() - mondayOffset);
 
-    weeklyVolume.textContent =
+    const weeklyWorkouts = workouts.filter(workout => {
 
-    getTotalVolume()
-    .toLocaleString() + " kg";
+        const date = parseWorkoutDate(workout.date);
+
+        return date && date >= startOfWeek && date <= now;
+
+    });
+
+    weeklySessions.textContent = weeklyWorkouts.length;
+
+    weeklyVolume.textContent = weeklyWorkouts
+        .reduce((total, workout) => total + Number(workout.volume || 0), 0)
+        .toLocaleString() + " kg";
 
 }
 
@@ -1329,6 +1368,8 @@ function renderHistory() {
                 <tr>
 
                     <td>${workout.date}</td>
+
+                    <td>${workout.trainingDay || "-"}</td>
 
                     <td>${workout.exercise}</td>
 
@@ -1999,26 +2040,32 @@ function exportCSV() {
 
     }
 
-    let csv =
+    const escapeCSV = value =>
+        `"${String(value ?? "").replaceAll('"', '""')}"`;
 
-`Fecha,Dia,Ejercicio,Peso,Series,Reps,Volumen,Notas
-`;
+    const rows = [[
+        "Fecha", "Dia", "Ejercicio", "Peso",
+        "Series", "Reps", "Volumen", "Notas"
+    ]];
 
     workouts.forEach(item => {
 
-        csv +=
-
-`${item.date},
-${item.trainingDay},
-${item.exercise},
-${item.weight},
-${item.sets},
-${item.reps},
-${item.volume},
-${item.notes || ""}
-\n`;
+        rows.push([
+            item.date,
+            item.trainingDay,
+            item.exercise,
+            item.weight,
+            item.sets,
+            item.reps,
+            item.volume,
+            item.notes || ""
+        ]);
 
     });
+
+    const csv = rows
+        .map(row => row.map(escapeCSV).join(","))
+        .join("\r\n");
 
     const blob = new Blob(
 
@@ -2044,6 +2091,8 @@ ${item.notes || ""}
 
     link.click();
 
+    URL.revokeObjectURL(url);
+
 }
 
 if(exportCSVBtn){
@@ -2065,6 +2114,12 @@ if(exportCSVBtn){
 function backupJSON() {
 
     const backup = {
+
+        app: "FORZA",
+
+        schemaVersion: 1,
+
+        exportedAt: new Date().toISOString(),
 
         workouts,
 
@@ -2114,6 +2169,8 @@ function backupJSON() {
 
     link.click();
 
+    URL.revokeObjectURL(url);
+
 }
 
 if(backupJSONBtn){
@@ -2159,8 +2216,20 @@ function restoreBackup(event){
 
             );
 
+            if(
+                !backup ||
+                !Array.isArray(backup.workouts) ||
+                !backup.routines ||
+                typeof backup.routines !== "object" ||
+                !Array.isArray(backup.bodyMeasurements)
+            ){
+
+                throw new Error("Estructura de backup inválida");
+
+            }
+
             workouts =
-            backup.workouts || [];
+            backup.workouts;
 
             routines =
             backup.routines || {
@@ -2173,10 +2242,10 @@ function restoreBackup(event){
             };
 
             bodyMeasurements =
-            backup.bodyMeasurements || [];
+            backup.bodyMeasurements;
 
             goalWeight =
-            backup.goalWeight || null;
+            backup.goalWeight ?? null;
 
             saveWorkouts();
             saveRoutines();
@@ -2189,13 +2258,19 @@ function restoreBackup(event){
                 "Backup restaurado"
             );
 
+            event.target.value = "";
+
         }
 
         catch(error){
 
+            console.error("No se pudo restaurar el backup", error);
+
             alert(
                 "Archivo inválido"
             );
+
+            event.target.value = "";
 
         }
 
@@ -2216,389 +2291,6 @@ if(restoreBackupInput){
     );
 
 }
-/* ==================================================
-   HISTORIAL
-================================================== */
-
-function renderHistory(){
-
-    if(!historyBody){
-
-        return;
-
-    }
-
-    historyBody.innerHTML = "";
-
-    let filtered = [...workouts];
-
-    if(searchExercise?.value){
-
-        filtered = filtered.filter(
-
-            item =>
-
-            item.exercise
-            .toLowerCase()
-            .includes(
-
-                searchExercise.value
-                .toLowerCase()
-
-            )
-
-        );
-
-    }
-
-    if(searchDate?.value){
-
-        filtered = filtered.filter(
-
-            item =>
-
-            item.date ===
-            searchDate.value
-
-        );
-
-    }
-
-    filtered
-    .slice()
-    .reverse()
-    .forEach((item,index)=>{
-
-        historyBody.innerHTML += `
-
-        <tr>
-
-            <td>${item.date}</td>
-
-            <td>${item.trainingDay}</td>
-
-            <td>${item.exercise}</td>
-
-            <td>${item.weight}</td>
-
-            <td>${item.sets}</td>
-
-            <td>${item.reps}</td>
-
-            <td>${item.volume}</td>
-
-            <td>
-
-                <button
-                class="btn-icon"
-                onclick="editWorkout(${workouts.indexOf(item)})">
-
-                    ✏️
-
-                </button>
-
-                <button
-                class="btn-icon danger"
-                onclick="deleteWorkout(${workouts.indexOf(item)})">
-
-                    🗑️
-
-                </button>
-
-            </td>
-
-        </tr>
-
-        `;
-
-    });
-
-}
-
-if(searchExercise){
-
-    searchExercise.addEventListener(
-
-        "input",
-
-        renderHistory
-
-    );
-
-}
-
-if(searchDate){
-
-    searchDate.addEventListener(
-
-        "change",
-
-        renderHistory
-
-    );
-
-}
-
-/* ==================================================
-   FILTRO ESTADISTICAS
-================================================== */
-
-function updateExerciseFilter(){
-
-    if(!exerciseFilter){
-
-        return;
-
-    }
-
-    exerciseFilter.innerHTML =
-
-    `<option value="">
-        Seleccionar ejercicio
-    </option>`;
-
-    const uniqueExercises = [
-
-        ...new Set(
-
-            workouts.map(
-
-                item => item.exercise
-
-            )
-
-        )
-
-    ];
-
-    uniqueExercises.forEach(exercise=>{
-
-        exerciseFilter.innerHTML +=
-
-        `
-
-        <option value="${exercise}">
-
-            ${exercise}
-
-        </option>
-
-        `;
-
-    });
-
-}
-
-/* ==================================================
-   INFO EJERCICIO
-================================================== */
-
-function updateExerciseInfo(){
-
-    if(
-        !exerciseFilter ||
-        !selectedExerciseInfo
-    ){
-
-        return;
-
-    }
-
-    const exercise =
-    exerciseFilter.value;
-
-    if(!exercise){
-
-        selectedExerciseInfo.innerHTML =
-
-        `<p>Seleccioná un ejercicio</p>`;
-
-        return;
-
-    }
-
-    const data =
-
-    workouts.filter(
-
-        item =>
-
-        item.exercise === exercise
-
-    );
-
-    const pr = Math.max(
-
-        ...data.map(
-            item => item.weight
-        )
-
-    );
-
-    const volume =
-
-    data.reduce(
-
-        (acc,item)=>
-
-        acc + item.volume,
-
-        0
-
-    );
-
-    selectedExerciseInfo.innerHTML =
-
-    `
-
-    <div class="stats-card">
-
-        <h4>${exercise}</h4>
-
-        <p>
-
-            PR:
-            <strong>
-                ${pr} kg
-            </strong>
-
-        </p>
-
-        <p>
-
-            Volumen Total:
-            <strong>
-                ${volume}
-            </strong>
-
-        </p>
-
-    </div>
-
-    `;
-
-}
-
-/* ==================================================
-   CHART
-================================================== */
-
-function updateProgressChart(){
-
-    const canvas =
-
-    document.getElementById(
-        "progressChart"
-    );
-
-    if(!canvas){
-
-        return;
-
-    }
-
-    const exercise =
-    exerciseFilter?.value;
-
-    if(!exercise){
-
-        return;
-
-    }
-
-    const data =
-
-    workouts.filter(
-
-        item =>
-
-        item.exercise === exercise
-
-    );
-
-    const labels =
-
-    data.map(
-        item => item.date
-    );
-
-    const weights =
-
-    data.map(
-        item => item.weight
-    );
-
-    if(progressChart){
-
-        progressChart.destroy();
-
-    }
-
-    progressChart =
-
-    new Chart(
-
-        canvas,
-
-        {
-
-            type: "line",
-
-            data: {
-
-                labels,
-
-                datasets: [
-
-                    {
-
-                        label:
-                        "Peso",
-
-                        data:
-                        weights,
-
-                        tension: 0.3
-
-                    }
-
-                ]
-
-            },
-
-            options: {
-
-                responsive: true,
-
-                maintainAspectRatio:
-                false
-
-            }
-
-        }
-
-    );
-
-}
-
-if(exerciseFilter){
-
-    exerciseFilter.addEventListener(
-
-        "change",
-
-        ()=>{
-
-            updateExerciseInfo();
-
-            updateProgressChart();
-
-        }
-
-    );
-
-}
-
 /* ==================================================
    TEMPORIZADOR
 ================================================== */
@@ -2736,4 +2428,3 @@ document.addEventListener(
     "DOMContentLoaded",
     initializeApp
 );
-
