@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.3
+   FORZA V6.4
 ================================================== */
 
 :root{
@@ -1038,6 +1038,131 @@ button:active{
    CALENDARIO
 ================================================== */
 
+.achievements-summary-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:28px;
+}
+
+.achievements-summary-card strong{
+    color:var(--primary);
+    font-size:26px;
+}
+
+.achievements-summary-progress{
+    width:min(420px, 48%);
+    height:14px;
+    overflow:hidden;
+    border-radius:999px;
+    background:#E5E7EB;
+}
+
+.achievements-summary-progress div{
+    width:0;
+    height:100%;
+    border-radius:inherit;
+    background:linear-gradient(90deg, var(--primary), var(--accent));
+    transition:width .4s ease;
+}
+
+.achievements-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:20px;
+}
+
+.achievement-card{
+    display:flex;
+    gap:18px;
+    padding:24px;
+    border:1px solid #E5E7EB;
+    border-radius:24px;
+    background:var(--card);
+    box-shadow:var(--shadow);
+}
+
+.achievement-card.locked{
+    opacity:.7;
+}
+
+.achievement-card.unlocked{
+    border-color:rgba(47, 107, 61, .35);
+    background:linear-gradient(135deg, var(--card), rgba(125, 185, 106, .12));
+}
+
+.achievement-icon{
+    display:grid;
+    width:58px;
+    min-width:58px;
+    height:58px;
+    place-items:center;
+    border-radius:18px;
+    background:#F3F4F6;
+    font-size:28px;
+    filter:grayscale(1);
+}
+
+.achievement-card.unlocked .achievement-icon{
+    background:rgba(125, 185, 106, .18);
+    filter:none;
+}
+
+.achievement-content{
+    flex:1;
+    min-width:0;
+}
+
+.achievement-title-row{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:7px;
+}
+
+.achievement-title-row h3{
+    margin:0;
+    color:var(--text);
+    font-size:19px;
+}
+
+.achievement-title-row span{
+    color:#6B7280;
+    font-size:11px;
+    font-weight:800;
+    white-space:nowrap;
+}
+
+.achievement-card.unlocked .achievement-title-row span{
+    color:var(--primary);
+}
+
+.achievement-content p{
+    min-height:42px;
+    color:#6B7280;
+    line-height:1.45;
+}
+
+.achievement-progress{
+    height:8px;
+    overflow:hidden;
+    margin:15px 0 8px;
+    border-radius:999px;
+    background:#E5E7EB;
+}
+
+.achievement-progress div{
+    height:100%;
+    border-radius:inherit;
+    background:var(--accent);
+}
+
+.achievement-content small{
+    color:#6B7280;
+    font-weight:700;
+}
+
 .calendar-layout{
     display:grid;
     grid-template-columns:minmax(0, 1.5fr) minmax(280px, .8fr);
@@ -1400,6 +1525,10 @@ body.dark-mode input[type="file"]{
         grid-template-columns:repeat(2, minmax(0, 1fr));
     }
 
+    .achievements-grid{
+        grid-template-columns:1fr;
+    }
+
     .sidebar{
         width:260px;
     }
@@ -1526,6 +1655,23 @@ body.dark-mode input[type="file"]{
 
 @media(max-width:480px){
 
+    .achievements-summary-card{
+        align-items:flex-start;
+        flex-direction:column;
+    }
+
+    .achievements-summary-progress{
+        width:100%;
+    }
+
+    .achievement-card{
+        padding:18px;
+    }
+
+    .achievement-title-row{
+        flex-direction:column;
+    }
+
     .dashboard-metrics-grid,
     .dashboard-routine-list{
         grid-template-columns:1fr;
@@ -1604,6 +1750,41 @@ body.dark-mode input[type="file"]{
 
 body.dark-mode .calendar-weekdays{
     color:#CBD5E1;
+}
+
+body.dark-mode .achievements-summary-progress,
+body.dark-mode .achievement-progress{
+    background:#374151;
+}
+
+body.dark-mode .achievement-card{
+    border-color:#374151;
+    background:#1F2937;
+    box-shadow:none;
+}
+
+body.dark-mode .achievement-card.unlocked{
+    border-color:rgba(125, 185, 106, .45);
+    background:linear-gradient(135deg, #1F2937, rgba(125, 185, 106, .13));
+}
+
+body.dark-mode .achievement-icon{
+    background:#374151;
+}
+
+body.dark-mode .achievement-title-row h3{
+    color:#F3F4F6;
+}
+
+body.dark-mode .achievement-content p,
+body.dark-mode .achievement-content small,
+body.dark-mode .achievement-title-row span{
+    color:#CBD5E1;
+}
+
+body.dark-mode .achievement-card.unlocked .achievement-title-row span,
+body.dark-mode .achievements-summary-card strong{
+    color:#7DD88F;
 }
 
 body.dark-mode .calendar-day{

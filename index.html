@@ -118,6 +118,15 @@
                 <li>
                     <button
                         class="menu-btn"
+                        data-tab="achievements"
+                    >
+                        🏅 Logros
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
                         data-tab="body"
                     >
                         📏 Corporal
@@ -644,6 +653,34 @@
         <canvas id="progressChart"></canvas>
 
     </div>
+
+</section>
+
+<!-- ==================================================
+     LOGROS
+================================================== -->
+
+<section
+    id="achievements"
+    class="tab"
+>
+
+    <h2 class="section-title">Logros</h2>
+
+    <div class="card achievements-summary-card">
+        <div>
+            <p class="dashboard-eyebrow">Tu progreso</p>
+            <strong id="achievementsUnlocked">0 de 0 desbloqueados</strong>
+        </div>
+        <div class="achievements-summary-progress" aria-hidden="true">
+            <div id="achievementsSummaryBar"></div>
+        </div>
+    </div>
+
+    <div
+        id="achievementsGrid"
+        class="achievements-grid"
+    ></div>
 
 </section>
 <!-- ==================================================

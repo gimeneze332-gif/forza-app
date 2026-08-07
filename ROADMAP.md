@@ -51,6 +51,8 @@ Criterio de salida: el dashboard responde “qué toca hoy, cómo vengo y cuál 
 
 ## Fase 4 — Logros
 
+Estado: implementado en `v6.4`, pendiente de validación final en iPhone.
+
 - Catálogo versionado de logros por sesiones, volumen, constancia y marcas.
 - Calcular logros desde los datos existentes para que sean recuperables.
 - Guardar únicamente estado de lectura/notificación, no duplicar resultados calculables.

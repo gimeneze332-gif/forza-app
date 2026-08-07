@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.3
+   FORZA V6.4
    GYM TRACKER
 ================================================== */
 
@@ -215,6 +215,19 @@ document.getElementById("statisticsPeriod");
 
 const statisticsMetric =
 document.getElementById("statisticsMetric");
+
+/* ==================================================
+   LOGROS
+================================================== */
+
+const achievementsUnlocked =
+document.getElementById("achievementsUnlocked");
+
+const achievementsSummaryBar =
+document.getElementById("achievementsSummaryBar");
+
+const achievementsGrid =
+document.getElementById("achievementsGrid");
 
 /* ==================================================
    CORPORAL
@@ -1581,6 +1594,8 @@ function updateDashboard(){
 
     updateDashboardBody();
 
+    updateAchievements();
+
     renderCalendar();
 
 }
@@ -2283,6 +2298,229 @@ if (statisticsPeriod) {
 if (statisticsMetric) {
 
     statisticsMetric.addEventListener("change", updateProgressChart);
+
+}
+
+/* ==================================================
+   SISTEMA DE LOGROS
+================================================== */
+
+function getAchievementConsistency() {
+
+    const sessionsByWeek = new Map();
+    const sessionDates = [...new Set(workouts.map(workout => workout.date))];
+
+    sessionDates.forEach(value => {
+
+        const date = parseWorkoutDate(value);
+        if (!date) return;
+
+        const monday = new Date(date);
+        const offset = (monday.getDay() + 6) % 7;
+        monday.setDate(monday.getDate() - offset);
+        monday.setHours(0, 0, 0, 0);
+
+        const key = monday.getTime();
+        sessionsByWeek.set(key, (sessionsByWeek.get(key) || 0) + 1);
+
+    });
+
+    const bestWeek = Math.max(0, ...sessionsByWeek.values());
+    const completeWeeks = [...sessionsByWeek.entries()]
+        .filter(([, sessions]) => sessions >= 4)
+        .map(([week]) => Number(week))
+        .sort((first, second) => first - second);
+    let longestStreak = 0;
+    let currentStreak = 0;
+    let previousWeek = null;
+
+    completeWeeks.forEach(week => {
+
+        currentStreak = previousWeek !== null && week - previousWeek === 604800000
+            ? currentStreak + 1
+            : 1;
+        longestStreak = Math.max(longestStreak, currentStreak);
+        previousWeek = week;
+
+    });
+
+    return { bestWeek, longestStreak };
+
+}
+
+function getBestWeightMatching(terms) {
+
+    return workouts.reduce((best, workout) => {
+
+        const exercise = normalizeExerciseName(workout.exercise);
+        const matches = terms.some(term => exercise.includes(term));
+
+        return matches
+            ? Math.max(best, Number(workout.weight || 0))
+            : best;
+
+    }, 0);
+
+}
+
+function getAchievements() {
+
+    const sessions = countWorkoutSessions(workouts);
+    const totalVolume = workouts.reduce(
+        (total, workout) => total + Number(workout.volume || 0),
+        0
+    );
+    const consistency = getAchievementConsistency();
+    const squatPR = getBestWeightMatching(["sentadilla", "squat"]);
+    const benchPR = getBestWeightMatching(["press banca", "press de banca", "bench"]);
+    const deadliftPR = getBestWeightMatching(["peso muerto", "deadlift"]);
+
+    return [
+        {
+            icon: "🏁",
+            title: "Primer paso",
+            description: "Completá tu primera sesión.",
+            current: sessions,
+            target: 1,
+            unit: "sesiones"
+        },
+        {
+            icon: "🔥",
+            title: "Rutina en marcha",
+            description: "Completá 10 sesiones.",
+            current: sessions,
+            target: 10,
+            unit: "sesiones"
+        },
+        {
+            icon: "💪",
+            title: "Constancia",
+            description: "Completá 25 sesiones.",
+            current: sessions,
+            target: 25,
+            unit: "sesiones"
+        },
+        {
+            icon: "🏆",
+            title: "Medio centenar",
+            description: "Completá 50 sesiones.",
+            current: sessions,
+            target: 50,
+            unit: "sesiones"
+        },
+        {
+            icon: "⚙️",
+            title: "Diez toneladas",
+            description: "Acumulá 10.000 kg de volumen.",
+            current: totalVolume,
+            target: 10000,
+            unit: "kg"
+        },
+        {
+            icon: "🚚",
+            title: "Cien toneladas",
+            description: "Acumulá 100.000 kg de volumen.",
+            current: totalVolume,
+            target: 100000,
+            unit: "kg"
+        },
+        {
+            icon: "📅",
+            title: "Semana completa",
+            description: "Entrená cuatro días en una semana.",
+            current: consistency.bestWeek,
+            target: 4,
+            unit: "días"
+        },
+        {
+            icon: "🧱",
+            title: "Mes consistente",
+            description: "Completá cuatro semanas consecutivas de cuatro días.",
+            current: consistency.longestStreak,
+            target: 4,
+            unit: "semanas"
+        },
+        {
+            icon: "🦵",
+            title: "Sentadilla 100",
+            description: "Alcanzá 100 kg en sentadilla.",
+            current: squatPR,
+            target: 100,
+            unit: "kg"
+        },
+        {
+            icon: "🏋️",
+            title: "Banca 80",
+            description: "Alcanzá 80 kg en press banca.",
+            current: benchPR,
+            target: 80,
+            unit: "kg"
+        },
+        {
+            icon: "⚡",
+            title: "Peso muerto 120",
+            description: "Alcanzá 120 kg en peso muerto.",
+            current: deadliftPR,
+            target: 120,
+            unit: "kg"
+        },
+        {
+            icon: "📏",
+            title: "Punto de partida",
+            description: "Registrá tu primera medición corporal.",
+            current: bodyMeasurements.length,
+            target: 1,
+            unit: "mediciones"
+        }
+    ].map(achievement => ({
+        ...achievement,
+        unlocked: achievement.current >= achievement.target
+    }));
+
+}
+
+function updateAchievements() {
+
+    if (!achievementsGrid || !achievementsUnlocked || !achievementsSummaryBar) return;
+
+    const achievements = getAchievements();
+    const unlockedCount = achievements.filter(achievement => achievement.unlocked).length;
+    const totalProgress = achievements.length > 0
+        ? (unlockedCount / achievements.length) * 100
+        : 0;
+
+    achievementsUnlocked.textContent =
+        `${unlockedCount} de ${achievements.length} desbloqueados`;
+    achievementsSummaryBar.style.width = `${totalProgress}%`;
+    achievementsGrid.innerHTML = "";
+
+    achievements.forEach(achievement => {
+
+        const card = document.createElement("article");
+        const progress = Math.min(100, (achievement.current / achievement.target) * 100);
+        const displayedCurrent = Math.min(achievement.current, achievement.target);
+
+        card.className = `achievement-card ${achievement.unlocked ? "unlocked" : "locked"}`;
+        card.innerHTML = `
+            <div class="achievement-icon" aria-hidden="true">${achievement.icon}</div>
+            <div class="achievement-content">
+                <div class="achievement-title-row">
+                    <h3>${achievement.title}</h3>
+                    <span>${achievement.unlocked ? "Desbloqueado" : "En progreso"}</span>
+                </div>
+                <p>${achievement.description}</p>
+                <div class="achievement-progress" aria-hidden="true">
+                    <div style="width:${progress}%"></div>
+                </div>
+                <small>
+                    ${displayedCurrent.toLocaleString("es-AR")} / ${achievement.target.toLocaleString("es-AR")} ${achievement.unit}
+                </small>
+            </div>
+        `;
+
+        achievementsGrid.appendChild(card);
+
+    });
 
 }
 /* ==================================================

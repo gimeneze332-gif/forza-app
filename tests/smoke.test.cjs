@@ -96,5 +96,9 @@ assert.equal(existingData.context.countWorkoutSessions([
     { date: "07/08/2026" },
     { date: "08/08/2026" }
 ]), 2);
+const achievements = existingData.context.getAchievements();
+assert.equal(achievements.length, 12);
+assert.equal(achievements.find(item => item.title === "Primer paso").unlocked, true);
+assert.equal(achievements.find(item => item.title === "Rutina en marcha").unlocked, false);
 
 console.log("FORZA smoke tests: OK");

@@ -1,4 +1,4 @@
-const CACHE_NAME = "forza-v6-dashboard-1";
+const CACHE_NAME = "forza-v6-achievements-1";
 
 const urlsToCache = [
   "./",
