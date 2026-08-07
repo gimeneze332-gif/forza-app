@@ -60,7 +60,9 @@ Estado: implementado en `v6.4`, pendiente de validación final en iPhone.
 
 Criterio de salida: restaurar un backup reconstruye los logros sin duplicarlos.
 
-## Fase 5 — Seguimiento físico
+## Fase 5 — Seguimiento físico (omitida)
+
+Estado: omitida por decisión del usuario; no se ampliarán mediciones ni fotos.
 
 - Gráfico de peso y medidas corporales.
 - Comparación por períodos y evolución hacia el objetivo.
@@ -69,7 +71,16 @@ Criterio de salida: restaurar un backup reconstruye los logros sin duplicarlos.
 
 Criterio de salida: medidas y fotos pueden respaldarse sin bloquear ni exceder el almacenamiento del navegador.
 
-## Fase 6 — Sincronización futura
+## Fase 6 — Protección de datos
+
+Estado: implementado en `v6.5`, pendiente de validación final en iPhone.
+
+- Fecha visible del último backup.
+- Aviso ante cambios sin respaldar.
+- Vista previa y confirmación antes de restaurar.
+- Restauración con recuperación de los datos anteriores si falla el guardado.
+
+## Fase 7 — Sincronización futura
 
 - Definir cuentas, privacidad, cifrado, borrado y recuperación antes de elegir proveedor.
 - Añadir identificadores estables, `createdAt`, `updatedAt` y estado de borrado a los registros.
@@ -86,5 +97,5 @@ Criterio de salida: dos dispositivos convergen sin duplicar entrenamientos ni so
 3. `v6.2`: progreso por ejercicio.
 4. `v6.3`: dashboard.
 5. `v6.4`: logros.
-6. `v6.5`: seguimiento físico ampliado.
+6. `v6.5`: protección de datos y restauración segura.
 7. `v7.0`: cuentas y sincronización.

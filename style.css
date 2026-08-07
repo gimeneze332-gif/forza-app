@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.4
+   FORZA V6.5
 ================================================== */
 
 :root{
@@ -939,6 +939,83 @@ tbody tr:hover{
    GOAL WEIGHT
 ================================================== */
 
+.backup-reminder{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:20px;
+    margin-bottom:24px;
+    padding:18px 22px;
+    border:1px solid #F2C94C;
+    border-radius:20px;
+    background:#FFF8DB;
+    color:#5F4B00;
+}
+
+.backup-reminder[hidden]{
+    display:none;
+}
+
+.backup-reminder p{
+    margin-top:4px;
+}
+
+.backup-reminder button{
+    width:auto;
+    flex-shrink:0;
+}
+
+.backup-status{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    margin-bottom:18px;
+    padding:18px;
+    border:1px solid #E5E7EB;
+    border-radius:18px;
+    background:#F8FAF9;
+}
+
+.backup-status.warning{
+    border-color:#F2C94C;
+    background:#FFF8DB;
+}
+
+.backup-status.protected{
+    border-color:rgba(47, 107, 61, .35);
+    background:rgba(125, 185, 106, .12);
+}
+
+.backup-status-icon{
+    font-size:30px;
+}
+
+.backup-status strong{
+    display:block;
+    margin-bottom:5px;
+    color:var(--text);
+}
+
+.backup-status p,
+.backup-help,
+.backup-restore-help{
+    color:#6B7280;
+    line-height:1.5;
+}
+
+.backup-help{
+    margin-bottom:18px;
+}
+
+.backup-card button,
+.backup-card input[type="file"]{
+    margin-bottom:12px;
+}
+
+.backup-restore-help{
+    display:block;
+}
+
 .goal-container{
 
     width:100%;
@@ -1386,6 +1463,33 @@ body.dark-mode .dashboard-highlight.neutral{
     color:#CBD5E1;
 }
 
+body.dark-mode .backup-reminder,
+body.dark-mode .backup-status.warning{
+    border-color:#A78016;
+    background:#3A3217;
+    color:#FDE68A;
+}
+
+body.dark-mode .backup-status{
+    border-color:#4B5563;
+    background:#273244;
+}
+
+body.dark-mode .backup-status.protected{
+    border-color:rgba(125, 185, 106, .45);
+    background:rgba(125, 185, 106, .13);
+}
+
+body.dark-mode .backup-status strong{
+    color:#F3F4F6;
+}
+
+body.dark-mode .backup-status p,
+body.dark-mode .backup-help,
+body.dark-mode .backup-restore-help{
+    color:#CBD5E1;
+}
+
 body.dark-mode .stat-number{
 
     color:#7DD88F;
@@ -1654,6 +1758,15 @@ body.dark-mode input[type="file"]{
 ================================================== */
 
 @media(max-width:480px){
+
+    .backup-reminder{
+        align-items:flex-start;
+        flex-direction:column;
+    }
+
+    .backup-reminder button{
+        width:100%;
+    }
 
     .achievements-summary-card{
         align-items:flex-start;

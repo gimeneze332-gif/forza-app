@@ -100,5 +100,9 @@ const achievements = existingData.context.getAchievements();
 assert.equal(achievements.length, 12);
 assert.equal(achievements.find(item => item.title === "Primer paso").unlocked, true);
 assert.equal(achievements.find(item => item.title === "Rutina en marcha").unlocked, false);
+existingData.context.saveWorkouts();
+assert.equal(existingData.storage.has("forza_data_updated_at"), true);
+existingData.context.backupJSON();
+assert.equal(existingData.storage.has("forza_last_backup"), true);
 
 console.log("FORZA smoke tests: OK");

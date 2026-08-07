@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.4
+   FORZA V6.5
    GYM TRACKER
 ================================================== */
 
@@ -13,7 +13,9 @@ const STORAGE = {
     routines: "forza_routines",
     body: "forza_body",
     goal: "forza_goal",
-    darkMode: "forza_darkmode"
+    darkMode: "forza_darkmode",
+    lastBackup: "forza_last_backup",
+    dataUpdatedAt: "forza_data_updated_at"
 
 };
 
@@ -278,6 +280,18 @@ document.getElementById("backupJSON");
 const restoreBackupInput =
 document.getElementById("restoreBackup");
 
+const backupStatus =
+document.getElementById("backupStatus");
+
+const backupStatusTitle =
+document.getElementById("backupStatusTitle");
+
+const backupStatusText =
+document.getElementById("backupStatusText");
+
+const backupReminder =
+document.getElementById("backupReminder");
+
 const timerDisplay =
 document.getElementById("timerDisplay");
 
@@ -291,39 +305,54 @@ document.getElementById("resetTimer");
    SAVE FUNCTIONS
 ================================================== */
 
-function saveWorkouts() {
+function markDataChanged() {
+
+    localStorage.setItem(STORAGE.dataUpdatedAt, new Date().toISOString());
+    updateBackupStatus();
+
+}
+
+function saveWorkouts(trackChange = true) {
 
     localStorage.setItem(
         STORAGE.workouts,
         JSON.stringify(workouts)
     );
 
+    if (trackChange) markDataChanged();
+
 }
 
-function saveRoutines() {
+function saveRoutines(trackChange = true) {
 
     localStorage.setItem(
         STORAGE.routines,
         JSON.stringify(routines)
     );
 
+    if (trackChange) markDataChanged();
+
 }
 
-function saveBody() {
+function saveBody(trackChange = true) {
 
     localStorage.setItem(
         STORAGE.body,
         JSON.stringify(bodyMeasurements)
     );
 
+    if (trackChange) markDataChanged();
+
 }
 
-function saveGoal() {
+function saveGoal(trackChange = true) {
 
     localStorage.setItem(
         STORAGE.goal,
         JSON.stringify(goalWeight)
     );
+
+    if (trackChange) markDataChanged();
 
 }
 
@@ -2973,6 +3002,53 @@ if(exportCSVBtn){
    BACKUP JSON
 ================================================== */
 
+function updateBackupStatus() {
+
+    if (!backupStatus || !backupStatusTitle || !backupStatusText) return;
+
+    const lastBackupValue = localStorage.getItem(STORAGE.lastBackup);
+    const updatedValue = localStorage.getItem(STORAGE.dataUpdatedAt);
+    const lastBackupDate = lastBackupValue ? new Date(lastBackupValue) : null;
+    const updatedDate = updatedValue ? new Date(updatedValue) : null;
+    const hasData = workouts.length > 0 || Object.values(routines).some(items => items.length > 0);
+    const hasPendingChanges = hasData && (
+        !lastBackupDate ||
+        (updatedDate && updatedDate > lastBackupDate)
+    );
+
+    backupStatus.classList.toggle("warning", hasPendingChanges);
+    backupStatus.classList.toggle("protected", hasData && !hasPendingChanges);
+
+    if (backupReminder) backupReminder.hidden = !hasPendingChanges;
+
+    if (!hasData) {
+
+        backupStatusTitle.textContent = "Todavía no hay datos para respaldar";
+        backupStatusText.textContent = "Cuando registres entrenamientos, FORZA te avisará.";
+        return;
+
+    }
+
+    if (!lastBackupDate || Number.isNaN(lastBackupDate.getTime())) {
+
+        backupStatusTitle.textContent = "Backup recomendado";
+        backupStatusText.textContent = "No hay un backup registrado en este dispositivo.";
+        return;
+
+    }
+
+    const formattedDate = lastBackupDate.toLocaleString("es-AR", {
+        dateStyle: "medium",
+        timeStyle: "short"
+    });
+
+    backupStatusTitle.textContent = hasPendingChanges
+        ? "Hay cambios sin respaldar"
+        : "Historial protegido";
+    backupStatusText.textContent = `Último backup: ${formattedDate}.`;
+
+}
+
 function backupJSON() {
 
     const backup = {
@@ -3033,6 +3109,9 @@ function backupJSON() {
 
     URL.revokeObjectURL(url);
 
+    localStorage.setItem(STORAGE.lastBackup, backup.exportedAt);
+    updateBackupStatus();
+
 }
 
 if(backupJSONBtn){
@@ -3083,12 +3162,49 @@ function restoreBackup(event){
                 !Array.isArray(backup.workouts) ||
                 !backup.routines ||
                 typeof backup.routines !== "object" ||
+                !Object.values(backup.routines).every(Array.isArray) ||
                 !Array.isArray(backup.bodyMeasurements)
             ){
 
                 throw new Error("Estructura de backup inválida");
 
             }
+
+            const backupSessions = countWorkoutSessions(backup.workouts);
+            const backupExercises = backup.workouts.length;
+            const routineExercises = Object.values(backup.routines)
+                .reduce((total, items) => total + (Array.isArray(items) ? items.length : 0), 0);
+            const exportedDate = backup.exportedAt
+                ? new Date(backup.exportedAt)
+                : null;
+            const exportedLabel = exportedDate && !Number.isNaN(exportedDate.getTime())
+                ? exportedDate.toLocaleString("es-AR", {
+                    dateStyle: "medium",
+                    timeStyle: "short"
+                })
+                : "fecha desconocida";
+            const confirmed = confirm(
+                `El backup contiene:\n\n` +
+                `• ${backupSessions} sesiones\n` +
+                `• ${backupExercises} ejercicios realizados\n` +
+                `• ${routineExercises} ejercicios en rutinas\n` +
+                `• Backup del ${exportedLabel}\n\n` +
+                `Esto reemplazará los datos actuales. ¿Continuar?`
+            );
+
+            if (!confirmed) {
+
+                event.target.value = "";
+                return;
+
+            }
+
+            const previousData = {
+                workouts,
+                routines,
+                bodyMeasurements,
+                goalWeight
+            };
 
             workouts =
             backup.workouts;
@@ -3109,10 +3225,32 @@ function restoreBackup(event){
             goalWeight =
             backup.goalWeight ?? null;
 
-            saveWorkouts();
-            saveRoutines();
-            saveBody();
-            saveGoal();
+            try {
+
+                saveWorkouts(false);
+                saveRoutines(false);
+                saveBody(false);
+                saveGoal(false);
+
+            } catch (storageError) {
+
+                workouts = previousData.workouts;
+                routines = previousData.routines;
+                bodyMeasurements = previousData.bodyMeasurements;
+                goalWeight = previousData.goalWeight;
+
+                saveWorkouts(false);
+                saveRoutines(false);
+                saveBody(false);
+                saveGoal(false);
+
+                throw storageError;
+
+            }
+
+            const restoredAt = new Date().toISOString();
+            localStorage.setItem(STORAGE.lastBackup, restoredAt);
+            localStorage.setItem(STORAGE.dataUpdatedAt, restoredAt);
 
             initializeApp();
 
@@ -3129,7 +3267,7 @@ function restoreBackup(event){
             console.error("No se pudo restaurar el backup", error);
 
             alert(
-                "Archivo inválido"
+                "No se pudo restaurar el backup. Tus datos actuales fueron conservados."
             );
 
             event.target.value = "";
@@ -3226,6 +3364,8 @@ function resetTimer(){
     timerSeconds = 90;
 
     updateTimerDisplay();
+
+    updateBackupStatus();
 
 }
 

@@ -196,6 +196,20 @@
 
     </h2>
 
+    <div id="backupReminder" class="backup-reminder" hidden>
+        <div>
+            <strong>Tu historial tiene cambios sin respaldar</strong>
+            <p>Generá un backup para proteger tus entrenamientos.</p>
+        </div>
+        <button
+            type="button"
+            class="secondary-btn"
+            data-dashboard-tab="extras"
+        >
+            Ir a backup
+        </button>
+    </div>
+
     <div class="dashboard-hero">
 
         <div class="card dashboard-today-card">
@@ -860,13 +874,25 @@
 
     </div>
 
-    <div class="card">
+    <div class="card backup-card">
 
         <h3>
 
-            Exportar Datos
+            Protección de Datos
 
         </h3>
+
+        <div id="backupStatus" class="backup-status">
+            <span class="backup-status-icon" aria-hidden="true">💾</span>
+            <div>
+                <strong id="backupStatusTitle">Comprobando backup…</strong>
+                <p id="backupStatusText"></p>
+            </div>
+        </div>
+
+        <p class="backup-help">
+            El backup JSON conserva entrenamientos, rutinas, objetivos y mediciones.
+        </p>
 
         <button
             id="exportCSV"
@@ -891,6 +917,10 @@
             id="restoreBackup"
             accept=".json"
         >
+
+        <small class="backup-restore-help">
+            Antes de restaurar, FORZA mostrará un resumen y pedirá confirmación.
+        </small>
 
     </div>
 
