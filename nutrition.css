@@ -59,7 +59,8 @@
 .nutrition-text-button,
 .nutrition-option,
 .nutrition-icon-button,
-.nutrition-frequent-item {
+.nutrition-frequent-item,
+.smart-text-choices button {
     min-height: 46px;
     border: 0;
     border-radius: 14px;
@@ -76,6 +77,7 @@
 .nutrition-option:focus-visible,
 .nutrition-icon-button:focus-visible,
 .nutrition-frequent-item:focus-visible,
+.smart-text-choices button:focus-visible,
 .nutrition-view input:focus-visible,
 .nutrition-view textarea:focus-visible {
     outline: 3px solid #65A30D;
@@ -87,6 +89,11 @@
     padding: 13px 18px;
     background: var(--primary);
     color: white;
+}
+
+.nutrition-primary-button:disabled {
+    cursor: not-allowed;
+    opacity: .5;
 }
 
 .nutrition-water-button {
@@ -276,17 +283,25 @@
 }
 
 .nutrition-review-form .nutrition-favorite-check,
-.nutrition-review-form .nutrition-primary-button {
+.nutrition-review-form .nutrition-meal-name,
+.nutrition-save-action {
     grid-column: 1 / -1;
 }
 
 #nutrition-settings-form .nutrition-primary-button,
-.nutrition-review-form .nutrition-primary-button,
 #nutrition-text-view > .nutrition-primary-button {
     position: sticky;
     bottom: 0;
     z-index: 2;
     box-shadow: 0 -10px 18px var(--card);
+}
+
+.nutrition-save-action {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    margin-bottom: 14px;
+    box-shadow: 0 8px 18px var(--card);
 }
 
 .nutrition-favorite-check {
@@ -332,6 +347,56 @@
     font-size: 13px;
     font-weight: 700;
     text-align: center;
+}
+
+.nutrition-smart-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.smart-text-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.smart-text-item,
+.smart-text-question {
+    padding: 12px;
+    border: 1px solid #E5E7EB;
+    border-radius: 14px;
+    background: #FFFFFF;
+}
+
+.smart-text-item > strong,
+.smart-text-item > span,
+.smart-text-question > strong {
+    display: block;
+}
+
+.smart-text-item > span {
+    margin-top: 4px;
+    color: #6B7280;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.smart-text-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.smart-text-choices button {
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid rgba(47, 107, 61, .28);
+    background: rgba(47, 107, 61, .09);
+    color: var(--primary);
+    font-size: 13px;
 }
 
 .nutrition-toast {
@@ -394,7 +459,9 @@ body.dark-mode .nutrition-sheet-handle {
 
 body.dark-mode .nutrition-view input,
 body.dark-mode .nutrition-view textarea,
-body.dark-mode .nutrition-frequent-item {
+body.dark-mode .nutrition-frequent-item,
+body.dark-mode .smart-text-item,
+body.dark-mode .smart-text-question {
     border-color: #4B5563;
     background: #273244;
     color: #F3F4F6;
@@ -415,6 +482,7 @@ body.dark-mode .nutrition-recognition-note.warning {
     .nutrition-card {
         padding: 20px;
     }
+
 }
 
 @media (max-width: 480px) {
@@ -436,7 +504,8 @@ body.dark-mode .nutrition-recognition-note.warning {
     }
 
     .nutrition-review-form .nutrition-favorite-check,
-    .nutrition-review-form .nutrition-primary-button {
+    .nutrition-review-form .nutrition-meal-name,
+    .nutrition-save-action {
         grid-column: auto;
     }
 }

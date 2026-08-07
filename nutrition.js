@@ -5,7 +5,9 @@
     const STORAGE = Object.freeze({
         entries: "forza_nutrition_entries",
         hydration: "forza_nutrition_hydration",
-        settings: "forza_nutrition_settings"
+        settings: "forza_nutrition_settings",
+        meals: "forza_nutrition_meals",
+        smartMemory: "forza_nutrition_smart_text_memory"
     });
 
     const CATALOG = [
@@ -27,6 +29,8 @@
     let entries = [];
     let hydration = [];
     let settings = null;
+    let meals = [];
+    let smartMemory = null;
     let draft = null;
     let el = null;
     let closeTimer = null;
@@ -150,6 +154,9 @@
             source: meal.source === "frequent" ? "frequent" : "text",
             isFavorite: Boolean(meal.isFavorite)
         };
+        if (meal.recognition) saved.recognition = meal.recognition;
+        if (meal.contextType) saved.contextType = meal.contextType;
+        if (Number.isFinite(Number(meal.confidence))) saved.confidence = Number(meal.confidence);
         entries.push(saved);
         write(STORAGE.entries, entries);
         return saved;
@@ -167,6 +174,151 @@
             if (key && !unique.has(key)) unique.set(key, item);
         });
         return [...unique.values()].slice(0, 8);
+    }
+
+    function smartTextApi() {
+        const api = typeof window !== "undefined" ? window.ForzaSmartText : null;
+        return api && typeof api.interpret === "function" ? api : null;
+    }
+
+    function recalculateDraftTotals() {
+        const keys = ["calories", "protein", "carbs", "fat"];
+        draft.totals = {};
+        keys.forEach(key => {
+            const values = draft.items.map(item => item[key]).filter(value => value != null && Number.isFinite(Number(value)));
+            draft.totals[key] = values.length ? round(values.reduce((sum, value) => sum + Number(value), 0)) : null;
+        });
+        fillReviewTotals();
+    }
+
+    function fillReviewTotals() {
+        const value = key => draft?.totals?.[key] == null ? "" : draft.totals[key];
+        el.reviewCalories.value = value("calories");
+        el.reviewProtein.value = value("protein");
+        el.reviewCarbs.value = value("carbs");
+        el.reviewFat.value = value("fat");
+    }
+
+    function confidenceLabel(value) {
+        if (value >= .85) return "Confianza alta";
+        if (value >= .6) return "Revisar";
+        return "Confirmación necesaria";
+    }
+
+    function rememberItem(item) {
+        const api = smartTextApi();
+        if (!api || !item?.catalogId || !item?.sourceText) return;
+        smartMemory = api.rememberCorrection(smartMemory, {
+            alias: item.sourceText, foodId: item.catalogId, grams: item.grams
+        });
+        write(STORAGE.smartMemory, smartMemory);
+    }
+
+    function resizeDraftItem(index, multiplier) {
+        const item = draft.items[index];
+        if (!item || !Number.isFinite(Number(item.grams)) || item.grams <= 0) return;
+        const previousGrams = Number(item.grams);
+        const grams = round(Number(item.baseGrams || previousGrams) * multiplier);
+        ["calories", "protein", "carbs", "fat"].forEach(key => {
+            if (item[key] != null) item[key] = round(Number(item[key]) * grams / previousGrams);
+        });
+        item.grams = grams;
+        item.quantity = item.unit === "g" || item.unit === "ml"
+            ? grams : round(Number(item.baseQuantity || item.quantity || 1) * multiplier);
+        item.estimated = true;
+        item.requiresConfirmation = true;
+        recalculateDraftTotals();
+        rememberItem(item);
+        renderSmartDetails();
+    }
+
+    function renderSmartDetails() {
+        el.smartDetails.innerHTML = "";
+        if (!draft?.smartText) { if (el.saveAction) el.saveAction.disabled = false; return; }
+        if (el.saveAction) el.saveAction.disabled = Boolean((draft.questions || []).length);
+
+        if (draft.items.length) {
+            const list = document.createElement("div");
+            list.className = "smart-text-items";
+            draft.items.forEach((item, index) => {
+                const card = document.createElement("article");
+                card.className = "smart-text-item";
+                const title = document.createElement("strong");
+                title.textContent = item.name || item.sourceText || "Componente";
+                const detail = document.createElement("span");
+                const quantity = item.grams ? `${item.grams} g` : "cantidad sin definir";
+                detail.textContent = `${quantity} · ${confidenceLabel(Number(item.confidence || 0))}${item.estimated ? " · estimado" : ""}`;
+                card.append(title, detail);
+                if (item.estimated) {
+                    const sizes = document.createElement("div");
+                    sizes.className = "smart-text-choices";
+                    [[.7, "Pequeña"], [1, "Normal"], [1.4, "Grande"]].forEach(([multiplier, label]) => {
+                        const button = document.createElement("button");
+                        button.type = "button"; button.textContent = label;
+                        button.addEventListener("click", () => resizeDraftItem(index, multiplier));
+                        sizes.appendChild(button);
+                    });
+                    card.appendChild(sizes);
+                }
+                list.appendChild(card);
+            });
+            el.smartDetails.appendChild(list);
+        }
+
+        (draft.questions || []).forEach((question, questionIndex) => {
+            const block = document.createElement("div");
+            block.className = "smart-text-question";
+            const label = document.createElement("strong");
+            label.textContent = question.label;
+            block.appendChild(label);
+            const choices = document.createElement("div");
+            choices.className = "smart-text-choices";
+            if (question.type === "food-choice") {
+                question.choices.forEach(choice => {
+                    const button = document.createElement("button");
+                    button.type = "button"; button.textContent = choice.label;
+                    button.addEventListener("click", () => {
+                        const api = smartTextApi();
+                        draft = { ...api.resolveChoice(draft, questionIndex, choice.id, "normal"), smartText: true };
+                        const added = draft.items[draft.items.length - 1];
+                        rememberItem(added); recalculateDraftTotals(); renderSmartDetails(); renderRecognitionNote();
+                    });
+                    choices.appendChild(button);
+                });
+            } else if (question.type === "candidate") {
+                (question.candidates || []).forEach((candidate, candidateIndex) => {
+                    const button = document.createElement("button");
+                    button.type = "button"; button.textContent = candidate.label;
+                    button.addEventListener("click", () => {
+                        draft = { ...smartTextApi().selectContextCandidate(draft, candidateIndex), smartText: true };
+                        recalculateDraftTotals(); renderSmartDetails(); renderRecognitionNote();
+                    });
+                    choices.appendChild(button);
+                });
+            } else if (question.type === "preparation") {
+                const button = document.createElement("button");
+                button.type = "button"; button.textContent = "Entendido, revisaré los valores";
+                button.addEventListener("click", () => {
+                    draft.questions = draft.questions.filter((_, index) => index !== questionIndex);
+                    renderSmartDetails(); renderRecognitionNote();
+                });
+                choices.appendChild(button);
+            }
+            block.appendChild(choices);
+            el.smartDetails.appendChild(block);
+        });
+    }
+
+    function renderRecognitionNote() {
+        const recognized = draft.items.map(item => item.name || item.sourceText);
+        const warnings = [];
+        if (draft.unrecognized?.length) warnings.push(`Sin reconocer: ${draft.unrecognized.join(", ")}.`);
+        if (draft.requiresConfirmation) warnings.push("Revisá y confirmá antes de guardar.");
+        if (draft.contextType) warnings.push("La referencia contextual nunca se registra automáticamente.");
+        el.recognitionNote.className = `nutrition-recognition-note${warnings.length ? " warning" : ""}`;
+        el.recognitionNote.textContent = warnings.length
+            ? `${recognized.length ? `Reconocido: ${recognized.join(", ")}. ` : ""}${warnings.join(" ")}`
+            : `Catálogo local: ${recognized.join(", ")}. Revisá cantidades y valores antes de guardar.`;
     }
 
     function renderCard() {
@@ -260,18 +412,20 @@
     function review() {
         const text = el.mealText.value.trim();
         if (!text) { el.feedback.textContent = "Escribí qué comiste."; el.mealText.focus(); return; }
-        draft = parseMealText(text);
+        const api = smartTextApi();
+        if (api) {
+            try {
+                draft = { ...api.interpret(text, { entries, meals, memory: smartMemory, now: new Date() }), smartText: true };
+            } catch (error) {
+                console.warn("Smart Text no pudo interpretar la comida. Se usará el reconocimiento básico.", error);
+                draft = parseMealText(text);
+            }
+        } else draft = parseMealText(text);
         el.originalText.textContent = draft.rawText;
-        el.reviewCalories.value = draft.totals.calories;
-        el.reviewProtein.value = draft.totals.protein;
-        el.reviewCarbs.value = draft.items.length ? draft.totals.carbs : "";
-        el.reviewFat.value = draft.items.length ? draft.totals.fat : "";
+        fillReviewTotals();
         el.reviewFavorite.checked = false;
-        const recognized = draft.items.map(item => item.sourceText);
-        el.recognitionNote.className = `nutrition-recognition-note${draft.unrecognized.length ? " warning" : ""}`;
-        el.recognitionNote.textContent = draft.unrecognized.length
-            ? `${recognized.length ? `Reconocido: ${recognized.join(", ")}. ` : ""}Sin reconocer: ${draft.unrecognized.join(", ")}. Los valores incluyen únicamente lo reconocido; corregilos antes de guardar.`
-            : `Catálogo local: ${recognized.join(", ")}. Revisá cantidades y valores antes de guardar.`;
+        el.reviewMealName.value = "";
+        renderRecognitionNote(); renderSmartDetails();
         el.feedback.textContent = "";
         show("review"); el.reviewCalories.focus();
     }
@@ -293,12 +447,27 @@
     function saveReviewed(event) {
         event.preventDefault();
         if (!draft) return;
-        saveMeal({
+        const saved = saveMeal({
             rawText: draft.rawText, items: draft.items,
             calories: el.reviewCalories.value, protein: el.reviewProtein.value,
             carbs: el.reviewCarbs.value, fat: el.reviewFat.value,
-            source: "text", isFavorite: el.reviewFavorite.checked
+            source: "text", isFavorite: el.reviewFavorite.checked,
+            recognition: draft.smartText ? "smart-text-v1" : undefined,
+            contextType: draft.contextType, confidence: draft.confidence
         });
+        const mealName = el.reviewMealName.value.trim();
+        const api = smartTextApi();
+        if (mealName && api && draft.items.length) {
+            const definition = api.createMealDefinition(mealName, draft.items, {
+                id: id("meal-template"), aliases: [], isFavorite: el.reviewFavorite.checked,
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+            });
+            if (definition) {
+                const normalized = api.normalizeText(mealName);
+                meals = meals.filter(meal => api.normalizeText(meal.name) !== normalized);
+                meals.push(definition); write(STORAGE.meals, meals);
+            }
+        }
         el.mealText.value = ""; renderCard(); close(); announce("✓ Comida registrada");
     }
 
@@ -312,7 +481,8 @@
             textView: get("text-view"), frequentView: get("frequent-view"), mealText: get("meal-text"), review: get("review"),
             frequentList: get("frequent-list"), reviewBack: get("review-back"), originalText: get("original-text"), recognitionNote: get("recognition-note"),
             saveForm: get("save-form"), reviewCalories: get("review-calories"), reviewProtein: get("review-protein"),
-            reviewCarbs: get("review-carbs"), reviewFat: get("review-fat"), reviewFavorite: get("review-favorite"), feedback: get("feedback"),
+            reviewCarbs: get("review-carbs"), reviewFat: get("review-fat"), reviewFavorite: get("review-favorite"),
+            reviewMealName: get("review-meal-name"), smartDetails: get("smart-details"), saveAction: document.querySelector(".nutrition-save-action"), feedback: get("feedback"),
             calories: get("calories"), protein: get("protein"), water: get("water"), toast: get("toast")
         };
     }
@@ -323,6 +493,10 @@
         entries = read(STORAGE.entries, [], Array.isArray);
         hydration = read(STORAGE.hydration, [], Array.isArray);
         settings = read(STORAGE.settings, null, value => value !== null && typeof value === "object");
+        meals = read(STORAGE.meals, [], Array.isArray);
+        const api = smartTextApi();
+        const rawMemory = read(STORAGE.smartMemory, null, value => value !== null && typeof value === "object");
+        smartMemory = api ? api.sanitizeMemory(rawMemory) : rawMemory;
         el.open.addEventListener("click", open);
         el.close.addEventListener("click", close);
         el.backdrop.addEventListener("click", close);

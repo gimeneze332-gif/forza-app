@@ -33,6 +33,7 @@ const context = {
             if (type === "DOMContentLoaded") domReady = callback;
         },
         getElementById() { return null; },
+        querySelector() { return null; },
         querySelectorAll() { return []; }
     }
 };
@@ -47,7 +48,9 @@ assert.deepEqual(
     [
         "forza_nutrition_entries",
         "forza_nutrition_hydration",
-        "forza_nutrition_settings"
+        "forza_nutrition_meals",
+        "forza_nutrition_settings",
+        "forza_nutrition_smart_text_memory"
     ].sort()
 );
 
@@ -58,6 +61,7 @@ assert.equal(parsed.totals.calories, 339);
 assert.equal(parsed.totals.protein, 18.9);
 assert.equal(typeof parsed.totals.carbs, "number");
 assert.equal(typeof parsed.totals.fat, "number");
+assert.equal(context.window.ForzaSmartText, undefined, "Nutrition conserva el fallback sin motor Smart Text");
 
 const uncertain = api.parseMealText("pizza casera especial");
 assert.equal(uncertain.rawText, "pizza casera especial");
@@ -112,10 +116,31 @@ assert.ok(
     html.indexOf('<script src="script.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'),
     "Gym inicia antes que el complemento Nutrition"
 );
+assert.ok(
+    html.indexOf('<script src="script.js"></script>') < html.indexOf('<script src="smart-text-catalog.js"></script>') &&
+    html.indexOf('<script src="smart-text-catalog.js"></script>') < html.indexOf('<script src="smart-text.js"></script>') &&
+    html.indexOf('<script src="smart-text.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'),
+    "Smart Text se carga después de Gym y antes de Nutrition"
+);
 assert.match(html, /id="nutrition-toast"[^>]+aria-live="polite"/);
 assert.ok(html.includes("Nutrici\u00f3n de hoy"));
 assert.equal(html.includes('id="nutrition-status"'), false);
 assert.ok(source.includes("+250 ml"));
 assert.ok(source.includes("Comida registrada"));
+assert.ok(html.includes('id="nutrition-review-meal-name"'));
+
+const serviceWorker = fs.readFileSync("sw.js", "utf8");
+assert.ok(serviceWorker.includes('"./smart-text-catalog.js"'));
+assert.ok(serviceWorker.includes('"./smart-text.js"'));
+
+const oldNutritionEntry = {
+    rawText: "Registro anterior", items: [], calories: 300, protein: 20,
+    carbs: null, fat: null, source: "text", isFavorite: false,
+    date: "2026-08-07", createdAt: "2026-08-07T10:00:00.000Z"
+};
+assert.deepEqual(
+    JSON.parse(JSON.stringify(api.calculateDailyTotals("2026-08-07", [oldNutritionEntry], []))),
+    { calories: 300, protein: 20, carbs: 0, fat: 0, water: 0 }
+);
 
 console.log("FORZA Nutrition tests: OK");

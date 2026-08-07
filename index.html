@@ -1023,6 +1023,8 @@
             <h3>Revisá antes de guardar</h3>
             <p id="nutrition-original-text" class="nutrition-original-text"></p>
             <div id="nutrition-recognition-note" class="nutrition-recognition-note"></div>
+            <button class="nutrition-primary-button nutrition-save-action" type="submit" form="nutrition-save-form">Guardar comida</button>
+            <div id="nutrition-smart-details" class="nutrition-smart-details"></div>
 
             <form id="nutrition-save-form" class="nutrition-review-form">
                 <label>Calorías
@@ -1041,7 +1043,9 @@
                     <input id="nutrition-review-favorite" type="checkbox">
                     Guardar como comida frecuente
                 </label>
-                <button class="nutrition-primary-button" type="submit">Guardar comida</button>
+                <label class="nutrition-meal-name">Nombre para reutilizar como Meal · opcional
+                    <input id="nutrition-review-meal-name" type="text" maxlength="60" placeholder="Ej.: Mi desayuno">
+                </label>
             </form>
         </div>
 
@@ -1052,6 +1056,8 @@
 <p id="nutrition-toast" class="nutrition-toast" role="status" aria-live="polite" aria-atomic="true"></p>
 
 <script src="script.js"></script>
+<script src="smart-text-catalog.js"></script>
+<script src="smart-text.js"></script>
 <script src="nutrition.js"></script>
 <script>
 
