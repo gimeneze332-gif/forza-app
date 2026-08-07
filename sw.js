@@ -1,4 +1,4 @@
-const CACHE_NAME = "forza-v6-stable-1";
+const CACHE_NAME = "forza-v6-calendar-1";
 
 const urlsToCache = [
   "./",

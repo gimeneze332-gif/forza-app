@@ -17,6 +17,8 @@ Criterio de salida: actualizar la PWA no pierde datos; un backup válido restaur
 
 ## Fase 1 — Calendario
 
+Estado: implementado en `v6.1`, pendiente de validación final en iPhone.
+
 - Vista mensual con días entrenados y navegación entre meses.
 - Detalle diario con ejercicios, volumen, duración y observaciones.
 - Reutilizar el historial existente; no crear una segunda fuente de datos.

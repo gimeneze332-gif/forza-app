@@ -100,6 +100,15 @@
                 <li>
                     <button
                         class="menu-btn"
+                        data-tab="calendar"
+                    >
+                        📅 Calendario
+                    </button>
+                </li>
+
+                <li>
+                    <button
+                        class="menu-btn"
                         data-tab="statistics"
                     >
                         📈 Estadísticas
@@ -525,6 +534,77 @@
             <tbody id="historyBody"></tbody>
 
         </table>
+
+    </div>
+
+</section>
+
+<!-- ==================================================
+     CALENDARIO
+================================================== -->
+
+<section
+    id="calendar"
+    class="tab"
+>
+
+    <h2 class="section-title">
+        Calendario
+    </h2>
+
+    <div class="calendar-layout">
+
+        <div class="card calendar-card">
+
+            <div class="calendar-header">
+
+                <button
+                    id="previousMonth"
+                    class="secondary-btn calendar-nav-btn"
+                    type="button"
+                    aria-label="Mes anterior"
+                >
+                    ‹
+                </button>
+
+                <h3 id="calendarMonthTitle"></h3>
+
+                <button
+                    id="nextMonth"
+                    class="secondary-btn calendar-nav-btn"
+                    type="button"
+                    aria-label="Mes siguiente"
+                >
+                    ›
+                </button>
+
+            </div>
+
+            <div class="calendar-weekdays" aria-hidden="true">
+                <span>Lun</span>
+                <span>Mar</span>
+                <span>Mié</span>
+                <span>Jue</span>
+                <span>Vie</span>
+                <span>Sáb</span>
+                <span>Dom</span>
+            </div>
+
+            <div
+                id="calendarGrid"
+                class="calendar-grid"
+            ></div>
+
+        </div>
+
+        <div
+            id="calendarDayDetail"
+            class="card calendar-detail"
+            aria-live="polite"
+        >
+            <h3>Detalle del día</h3>
+            <p>Seleccioná un día para ver el entrenamiento.</p>
+        </div>
 
     </div>
 

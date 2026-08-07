@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.0
+   FORZA V6.1
    GYM TRACKER
 ================================================== */
 
@@ -69,6 +69,11 @@ let editingWorkout = null;
 
 let timerSeconds = 90;
 let timerInterval = null;
+
+let calendarCursor = new Date();
+calendarCursor.setDate(1);
+
+let selectedCalendarDate = null;
 
 /* ==================================================
    DOM
@@ -154,6 +159,25 @@ document.getElementById("searchExercise");
 
 const searchDate =
 document.getElementById("searchDate");
+
+/* ==================================================
+   CALENDARIO
+================================================== */
+
+const calendarMonthTitle =
+document.getElementById("calendarMonthTitle");
+
+const calendarGrid =
+document.getElementById("calendarGrid");
+
+const calendarDayDetail =
+document.getElementById("calendarDayDetail");
+
+const previousMonthBtn =
+document.getElementById("previousMonth");
+
+const nextMonthBtn =
+document.getElementById("nextMonth");
 
 /* ==================================================
    ESTADISTICAS
@@ -1296,6 +1320,8 @@ function updateDashboard(){
 
     updateWeeklySummary();
 
+    renderCalendar();
+
 }
 /* ==================================================
    HISTORIAL
@@ -1405,6 +1431,193 @@ function renderHistory() {
             `;
 
         });
+
+}
+
+/* ==================================================
+   CALENDARIO DE ENTRENAMIENTOS
+================================================== */
+
+function formatCalendarDate(year, month, day) {
+
+    return new Date(year, month, day)
+        .toLocaleDateString("es-AR");
+
+}
+
+function getWorkoutsByDate(date) {
+
+    return workouts.filter(workout => workout.date === date);
+
+}
+
+function renderCalendarDayDetail(date) {
+
+    if (!calendarDayDetail) return;
+
+    calendarDayDetail.innerHTML = "";
+
+    const title = document.createElement("h3");
+    title.textContent = date || "Detalle del día";
+    calendarDayDetail.appendChild(title);
+
+    if (!date) {
+
+        const emptyMessage = document.createElement("p");
+        emptyMessage.textContent = "Seleccioná un día para ver el entrenamiento.";
+        calendarDayDetail.appendChild(emptyMessage);
+        return;
+
+    }
+
+    const dayWorkouts = getWorkoutsByDate(date);
+
+    if (dayWorkouts.length === 0) {
+
+        const emptyMessage = document.createElement("p");
+        emptyMessage.textContent = "No hay entrenamientos registrados este día.";
+        calendarDayDetail.appendChild(emptyMessage);
+        return;
+
+    }
+
+    const totalVolume = dayWorkouts.reduce(
+        (total, workout) => total + Number(workout.volume || 0),
+        0
+    );
+
+    const summary = document.createElement("div");
+    summary.className = "calendar-day-total";
+    summary.textContent =
+        `${dayWorkouts.length} ejercicio${dayWorkouts.length === 1 ? "" : "s"} · ` +
+        `${totalVolume.toLocaleString()} kg de volumen`;
+    calendarDayDetail.appendChild(summary);
+
+    const list = document.createElement("div");
+    list.className = "calendar-detail-list";
+
+    dayWorkouts.forEach(workout => {
+
+        const session = document.createElement("article");
+        session.className = "calendar-session";
+
+        const exercise = document.createElement("strong");
+        exercise.textContent = workout.exercise;
+
+        const data = document.createElement("p");
+        data.textContent =
+            `${workout.trainingDay || "Rutina"} · ` +
+            `${workout.sets} × ${workout.reps} · ${workout.weight} kg`;
+
+        session.append(exercise, data);
+
+        if (workout.notes) {
+
+            const notes = document.createElement("p");
+            notes.textContent = workout.notes;
+            session.appendChild(notes);
+
+        }
+
+        list.appendChild(session);
+
+    });
+
+    calendarDayDetail.appendChild(list);
+
+}
+
+function renderCalendar() {
+
+    if (!calendarGrid || !calendarMonthTitle) return;
+
+    const year = calendarCursor.getFullYear();
+    const month = calendarCursor.getMonth();
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = getTodayDate();
+
+    calendarMonthTitle.textContent = calendarCursor.toLocaleDateString(
+        "es-AR",
+        { month: "long", year: "numeric" }
+    );
+
+    calendarGrid.innerHTML = "";
+
+    for (let index = 0; index < firstWeekday; index += 1) {
+
+        const emptyCell = document.createElement("span");
+        emptyCell.className = "calendar-day empty";
+        emptyCell.setAttribute("aria-hidden", "true");
+        calendarGrid.appendChild(emptyCell);
+
+    }
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+
+        const date = formatCalendarDate(year, month, day);
+        const dayWorkouts = getWorkoutsByDate(date);
+        const button = document.createElement("button");
+
+        button.type = "button";
+        button.className = "calendar-day";
+        button.textContent = day;
+        button.setAttribute("aria-label", `${date}: ${dayWorkouts.length} ejercicios`);
+
+        if (dayWorkouts.length > 0) button.classList.add("has-workout");
+        if (date === today) button.classList.add("today");
+        if (date === selectedCalendarDate) button.classList.add("selected");
+
+        button.addEventListener("click", () => {
+
+            selectedCalendarDate = date;
+            renderCalendar();
+            renderCalendarDayDetail(date);
+
+        });
+
+        calendarGrid.appendChild(button);
+
+    }
+
+    if (selectedCalendarDate) {
+
+        const selectedDate = parseWorkoutDate(selectedCalendarDate);
+
+        if (
+            !selectedDate ||
+            selectedDate.getFullYear() !== year ||
+            selectedDate.getMonth() !== month
+        ) {
+
+            selectedCalendarDate = null;
+            renderCalendarDayDetail(null);
+
+        }
+
+    }
+
+}
+
+if (previousMonthBtn) {
+
+    previousMonthBtn.addEventListener("click", () => {
+
+        calendarCursor.setMonth(calendarCursor.getMonth() - 1);
+        renderCalendar();
+
+    });
+
+}
+
+if (nextMonthBtn) {
+
+    nextMonthBtn.addEventListener("click", () => {
+
+        calendarCursor.setMonth(calendarCursor.getMonth() + 1);
+        renderCalendar();
+
+    });
 
 }
 
