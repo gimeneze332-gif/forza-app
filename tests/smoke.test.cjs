@@ -91,5 +91,10 @@ assert.equal(existingData.context.escapeHTML("<Press & banca>"), "&lt;Press &amp
 assert.equal(existingData.context.getWorkoutsByDate("07/08/2026").length, 1);
 assert.equal(existingData.context.getWorkoutsByDate("08/08/2026").length, 0);
 assert.equal(existingData.context.formatCalendarDate(2026, 7, 7), "7/8/2026");
+assert.equal(existingData.context.countWorkoutSessions([
+    { date: "07/08/2026" },
+    { date: "07/08/2026" },
+    { date: "08/08/2026" }
+]), 2);
 
 console.log("FORZA smoke tests: OK");

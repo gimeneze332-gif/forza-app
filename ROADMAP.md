@@ -39,6 +39,8 @@ Criterio de salida: los cálculos son reproducibles y coinciden con los registro
 
 ## Fase 3 — Dashboard
 
+Estado: implementado en `v6.3`, pendiente de validación final en iPhone.
+
 - Entrenamiento del día y último entrenamiento.
 - Último PR y próximo objetivo.
 - Volumen y sesiones reales de la semana y del mes.

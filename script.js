@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.2
+   FORZA V6.3
    GYM TRACKER
 ================================================== */
 
@@ -105,6 +105,27 @@ document.getElementById("weeklySessions");
 
 const weeklyVolume =
 document.getElementById("weeklyVolume");
+
+const monthlySessions =
+document.getElementById("monthlySessions");
+
+const monthlyVolume =
+document.getElementById("monthlyVolume");
+
+const weeklyComparison =
+document.getElementById("weeklyComparison");
+
+const dashboardLatestPR =
+document.getElementById("dashboardLatestPR");
+
+const dashboardBodySummary =
+document.getElementById("dashboardBodySummary");
+
+const dashboardGoal =
+document.getElementById("dashboardGoal");
+
+const dashboardActionButtons =
+document.querySelectorAll("[data-dashboard-tab]");
 
 /* ==================================================
    RUTINAS
@@ -416,6 +437,16 @@ menuButtons.forEach(button => {
         }
 
     );
+
+});
+
+dashboardActionButtons.forEach(button => {
+
+    button.addEventListener("click", () => {
+
+        activateTab(button.dataset.dashboardTab);
+
+    });
 
 });
 
@@ -811,9 +842,19 @@ function updateTodayWorkout() {
 
     if (!todayWorkout) return;
 
-    const day = trainingDay
-        ? trainingDay.value
-        : "Día 1";
+    const routineDays = ["Día 1", "Día 2", "Día 3", "Día 4"];
+    const todayRecords = getWorkoutsByDate(getTodayDate());
+    const latestWorkout = workouts[workouts.length - 1];
+    let day = todayRecords[0]?.trainingDay;
+
+    if (!day && latestWorkout?.trainingDay) {
+
+        const previousIndex = routineDays.indexOf(latestWorkout.trainingDay);
+        day = routineDays[(previousIndex + 1) % routineDays.length];
+
+    }
+
+    if (!day || !routines[day]) day = routineDays[0];
 
     const exercises = routines[day] || [];
 
@@ -822,21 +863,24 @@ function updateTodayWorkout() {
         todayWorkout.innerHTML = `
             <div class="empty-state">
                 <span>📋</span>
-                <p>No hay ejercicios cargados</p>
+                <p>${escapeHTML(day)} no tiene ejercicios cargados</p>
             </div>
         `;
 
         return;
     }
 
-    todayWorkout.innerHTML = exercises
+    todayWorkout.innerHTML = `
+        <h3 class="dashboard-routine-title">${escapeHTML(day)}</h3>
+        <div class="dashboard-routine-list">
+    ` + exercises
         .map(exercise => `
             <div class="today-item">
                 <span>🏋️</span>
-                ${exercise}
+                ${escapeHTML(exercise)}
             </div>
         `)
-        .join("");
+        .join("") + "</div>";
 
 }
 
@@ -1153,28 +1197,42 @@ function updateLastWorkout(){
 
     }
 
-    const workout =
+    const sortedWorkouts = workouts.slice().sort((first, second) => {
 
-    workouts[
-        workouts.length - 1
-    ];
+        const firstDate = parseWorkoutDate(first.date)?.getTime() || 0;
+        const secondDate = parseWorkoutDate(second.date)?.getTime() || 0;
+        return firstDate - secondDate || Number(first.id || 0) - Number(second.id || 0);
+
+    });
+    const workout = sortedWorkouts[sortedWorkouts.length - 1];
+    const sessionWorkouts = getWorkoutsByDate(workout.date);
+    const sessionVolume = sessionWorkouts.reduce(
+        (total, item) => total + Number(item.volume || 0),
+        0
+    );
+    const workoutDate = parseWorkoutDate(workout.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysAgo = workoutDate
+        ? Math.max(0, Math.round((today - workoutDate) / 86400000))
+        : null;
+    const relativeDate = daysAgo === 0
+        ? "Hoy"
+        : daysAgo === 1
+            ? "Hace 1 día"
+            : daysAgo !== null
+                ? `Hace ${daysAgo} días`
+                : workout.date;
 
     lastWorkout.innerHTML =
 
     `
     <div class="last-card">
 
-        <strong>
-            ${workout.exercise}
-        </strong>
-
-        <p>
-            ${workout.weight} kg
-        </p>
-
-        <small>
-            ${workout.date}
-        </small>
+        <strong>${escapeHTML(workout.trainingDay || "Entrenamiento")}</strong>
+        <p>${sessionWorkouts.length} ejercicio${sessionWorkouts.length === 1 ? "" : "s"}</p>
+        <p>${sessionVolume.toLocaleString("es-AR")} kg de volumen</p>
+        <small>${relativeDate} · ${workout.date}</small>
 
     </div>
     `;
@@ -1313,19 +1371,193 @@ function updateWeeklySummary(){
     startOfWeek.setHours(0, 0, 0, 0);
     startOfWeek.setDate(startOfWeek.getDate() - mondayOffset);
 
-    const weeklyWorkouts = workouts.filter(workout => {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const weeklyWorkouts = getWorkoutsInRange(startOfWeek, now);
+    const monthlyWorkouts = getWorkoutsInRange(startOfMonth, now);
 
-        const date = parseWorkoutDate(workout.date);
-
-        return date && date >= startOfWeek && date <= now;
-
-    });
-
-    weeklySessions.textContent = weeklyWorkouts.length;
+    weeklySessions.textContent = countWorkoutSessions(weeklyWorkouts);
 
     weeklyVolume.textContent = weeklyWorkouts
         .reduce((total, workout) => total + Number(workout.volume || 0), 0)
         .toLocaleString() + " kg";
+
+    if (monthlySessions) {
+
+        monthlySessions.textContent = countWorkoutSessions(monthlyWorkouts);
+
+    }
+
+    if (monthlyVolume) {
+
+        monthlyVolume.textContent = monthlyWorkouts
+            .reduce((total, workout) => total + Number(workout.volume || 0), 0)
+            .toLocaleString() + " kg";
+
+    }
+
+}
+
+function getWorkoutsInRange(start, end) {
+
+    return workouts.filter(workout => {
+
+        const date = parseWorkoutDate(workout.date);
+        return date && date >= start && date <= end;
+
+    });
+
+}
+
+function countWorkoutSessions(records) {
+
+    return new Set(records.map(workout => workout.date)).size;
+
+}
+
+function updateWeeklyComparison() {
+
+    if (!weeklyComparison) return;
+
+    const now = new Date();
+    const currentStart = new Date(now);
+    const mondayOffset = (now.getDay() + 6) % 7;
+    currentStart.setHours(0, 0, 0, 0);
+    currentStart.setDate(currentStart.getDate() - mondayOffset);
+
+    const previousEnd = new Date(currentStart);
+    previousEnd.setMilliseconds(-1);
+    const previousStart = new Date(currentStart);
+    previousStart.setDate(previousStart.getDate() - 7);
+
+    const currentVolume = getWorkoutsInRange(currentStart, now)
+        .reduce((total, workout) => total + Number(workout.volume || 0), 0);
+    const previousVolume = getWorkoutsInRange(previousStart, previousEnd)
+        .reduce((total, workout) => total + Number(workout.volume || 0), 0);
+
+    if (currentVolume === 0 && previousVolume === 0) {
+
+        weeklyComparison.innerHTML = "<p>Todavía no hay actividad en estas dos semanas.</p>";
+        return;
+
+    }
+
+    if (previousVolume === 0) {
+
+        weeklyComparison.innerHTML = `
+            <strong class="dashboard-highlight positive">Semana activa</strong>
+            <p>${currentVolume.toLocaleString("es-AR")} kg acumulados.</p>
+        `;
+        return;
+
+    }
+
+    const change = ((currentVolume - previousVolume) / previousVolume) * 100;
+    const changeClass = change > 0 ? "positive" : change < 0 ? "negative" : "neutral";
+
+    weeklyComparison.innerHTML = `
+        <strong class="dashboard-highlight ${changeClass}">
+            ${change > 0 ? "+" : ""}${change.toLocaleString("es-AR", {
+                maximumFractionDigits: 1
+            })}%
+        </strong>
+        <p>de volumen frente a la semana anterior.</p>
+    `;
+
+}
+
+function updateDashboardLatestPR() {
+
+    if (!dashboardLatestPR) return;
+
+    const sortedWorkouts = workouts.slice().sort((first, second) => {
+
+        const firstDate = parseWorkoutDate(first.date)?.getTime() || 0;
+        const secondDate = parseWorkoutDate(second.date)?.getTime() || 0;
+        return firstDate - secondDate || Number(first.id || 0) - Number(second.id || 0);
+
+    });
+    const records = new Map();
+    let latestPR = null;
+
+    sortedWorkouts.forEach(workout => {
+
+        const exercise = normalizeExerciseName(workout.exercise);
+        const weight = Number(workout.weight || 0);
+
+        if (!records.has(exercise) || weight > records.get(exercise)) {
+
+            records.set(exercise, weight);
+            latestPR = workout;
+
+        }
+
+    });
+
+    if (!latestPR) {
+
+        dashboardLatestPR.innerHTML = "<p>Tu próximo récord aparecerá acá.</p>";
+        return;
+
+    }
+
+    dashboardLatestPR.innerHTML = `
+        <strong class="dashboard-highlight">${escapeHTML(latestPR.exercise)}</strong>
+        <p>${Number(latestPR.weight).toLocaleString("es-AR")} kg</p>
+        <small>${latestPR.date}</small>
+    `;
+
+}
+
+function updateDashboardBody() {
+
+    if (!dashboardBodySummary || !dashboardGoal) return;
+
+    const currentWeight = getCurrentWeight();
+
+    if (currentWeight === null) {
+
+        dashboardBodySummary.innerHTML = "<p>Registrá tu peso para ver la evolución.</p>";
+    } else {
+
+        const previousMeasurement = bodyMeasurements[bodyMeasurements.length - 2];
+        const recentChange = previousMeasurement
+            ? Number(currentWeight) - Number(previousMeasurement.weight)
+            : 0;
+
+        dashboardBodySummary.innerHTML = `
+            <strong class="dashboard-highlight">${Number(currentWeight).toLocaleString("es-AR")} kg</strong>
+            <p>${previousMeasurement
+                ? `${recentChange > 0 ? "+" : ""}${recentChange.toLocaleString("es-AR", {
+                    maximumFractionDigits: 1
+                })} kg desde la medición anterior`
+                : "Primera medición registrada"
+            }</p>
+        `;
+
+    }
+
+    if (!goalWeight) {
+
+        dashboardGoal.innerHTML = "<p>Definí un objetivo de peso en Extras.</p>";
+        return;
+
+    }
+
+    const remaining = currentWeight === null
+        ? null
+        : Number(goalWeight) - Number(currentWeight);
+
+    dashboardGoal.innerHTML = `
+        <strong class="dashboard-highlight">${Number(goalWeight).toLocaleString("es-AR")} kg</strong>
+        <p>${remaining === null
+            ? "Objetivo corporal"
+            : Math.abs(remaining) < 0.05
+                ? "¡Objetivo alcanzado!"
+                : `${Math.abs(remaining).toLocaleString("es-AR", {
+                    maximumFractionDigits: 1
+                })} kg para ${remaining > 0 ? "llegar" : "volver"} al objetivo`
+        }</p>
+    `;
 
 }
 
@@ -1342,6 +1574,12 @@ function updateDashboard(){
     updatePRs();
 
     updateWeeklySummary();
+
+    updateWeeklyComparison();
+
+    updateDashboardLatestPR();
+
+    updateDashboardBody();
 
     renderCalendar();
 
@@ -2090,6 +2328,8 @@ function saveBodyMeasurement(event) {
 
     updateGoalProgress();
 
+    updateDashboard();
+
 }
 
 /* ==================================================
@@ -2342,6 +2582,8 @@ function saveWeightGoal() {
     saveGoal();
 
     updateGoalProgress();
+
+    updateDashboard();
 
 }
 

@@ -1,5 +1,5 @@
 /* ==================================================
-   FORZA V6.2
+   FORZA V6.3
 ================================================== */
 
 :root{
@@ -732,6 +732,114 @@ tbody tr:hover{
     margin-bottom:0;
 }
 
+.dashboard-hero{
+    display:grid;
+    grid-template-columns:minmax(0, 1.25fr) minmax(280px, .75fr);
+    gap:24px;
+}
+
+.dashboard-hero .card{
+    display:flex;
+    min-height:320px;
+    flex-direction:column;
+}
+
+.dashboard-eyebrow{
+    margin-bottom:12px;
+    color:#6B7280;
+    font-size:13px;
+    font-weight:800;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+}
+
+.dashboard-routine-title{
+    margin-bottom:14px !important;
+    font-size:30px !important;
+}
+
+.dashboard-routine-list{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:10px;
+}
+
+.dashboard-action{
+    width:100%;
+    margin-top:auto;
+}
+
+.dashboard-metrics-grid{
+    display:grid;
+    grid-template-columns:repeat(4, minmax(0, 1fr));
+    gap:16px;
+    margin-bottom:30px;
+}
+
+.dashboard-metric-card{
+    padding:22px;
+    border-radius:22px;
+    background:var(--card);
+    box-shadow:var(--shadow);
+}
+
+.dashboard-metric-card span{
+    display:block;
+    min-height:38px;
+    margin-bottom:10px;
+    color:#6B7280;
+    font-size:13px;
+    font-weight:700;
+}
+
+.dashboard-metric-card strong{
+    color:var(--primary);
+    font-size:26px;
+}
+
+.dashboard-main-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:24px;
+}
+
+.dashboard-insight-card{
+    min-height:190px;
+    margin-bottom:0;
+}
+
+.dashboard-highlight{
+    display:block;
+    margin-bottom:8px;
+    color:var(--primary);
+    font-size:28px;
+    line-height:1.2;
+}
+
+.dashboard-highlight.positive{
+    color:#16803A;
+}
+
+.dashboard-highlight.negative{
+    color:#C0392B;
+}
+
+.dashboard-highlight.neutral{
+    color:#6B7280;
+}
+
+.dashboard-insight-card p,
+.dashboard-last-card p{
+    line-height:1.6;
+}
+
+.dashboard-insight-card small,
+.dashboard-last-card small{
+    display:block;
+    margin-top:8px;
+    color:#6B7280;
+}
+
 .statistics-controls label{
     display:flex;
     flex-direction:column;
@@ -1128,6 +1236,31 @@ body.dark-mode .stat-card h3{
 
 }
 
+body.dark-mode .dashboard-metric-card{
+    background:#1F2937;
+    box-shadow:none;
+}
+
+body.dark-mode .dashboard-eyebrow,
+body.dark-mode .dashboard-metric-card span,
+body.dark-mode .dashboard-insight-card small,
+body.dark-mode .dashboard-last-card small{
+    color:#CBD5E1;
+}
+
+body.dark-mode .dashboard-metric-card strong,
+body.dark-mode .dashboard-highlight{
+    color:#7DD88F;
+}
+
+body.dark-mode .dashboard-highlight.negative{
+    color:#FCA5A5;
+}
+
+body.dark-mode .dashboard-highlight.neutral{
+    color:#CBD5E1;
+}
+
 body.dark-mode .stat-number{
 
     color:#7DD88F;
@@ -1241,6 +1374,10 @@ body.dark-mode input[type="file"]{
 
 @media(max-width:1200px){
 
+    .dashboard-metrics-grid{
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+    }
+
     .stats-grid{
         grid-template-columns:
         repeat(2,1fr);
@@ -1249,6 +1386,11 @@ body.dark-mode input[type="file"]{
 }
 
 @media(max-width:900px){
+
+    .dashboard-hero,
+    .dashboard-main-grid{
+        grid-template-columns:1fr;
+    }
 
     .calendar-layout{
         grid-template-columns:1fr;
@@ -1383,6 +1525,19 @@ body.dark-mode input[type="file"]{
 ================================================== */
 
 @media(max-width:480px){
+
+    .dashboard-metrics-grid,
+    .dashboard-routine-list{
+        grid-template-columns:1fr;
+    }
+
+    .dashboard-hero .card{
+        min-height:0;
+    }
+
+    .dashboard-action{
+        margin-top:24px;
+    }
 
     .exercise-progress-header{
         align-items:flex-start;

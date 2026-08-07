@@ -187,116 +187,79 @@
 
     </h2>
 
-    <div class="stats-grid">
+    <div class="dashboard-hero">
 
-        <div class="stat-card">
-
-            <h3>
-                Entrenamientos
-            </h3>
-
-
-            <span
-    id="totalWorkoutsCard"
-    class="stat-number"
->
-    0
-</span>
+        <div class="card dashboard-today-card">
+            <p class="dashboard-eyebrow">Hoy toca</p>
+            <div id="todayWorkout"></div>
+            <button
+                type="button"
+                class="primary-btn dashboard-action"
+                data-dashboard-tab="training"
+            >
+                Registrar entrenamiento
+            </button>
         </div>
 
-        <div class="stat-card">
-
-            <h3>
-                Ejercicios
-            </h3>
-
-            <span
-    id="totalExercisesCard"
-    class="stat-number"
->
-    0
-</span>
-
-        </div>
-
-        <div class="stat-card">
-
-            <h3>
-                Volumen Total
-            </h3>
-
-           <span
-    id="totalVolumeCard"
-    class="stat-number"
->
-    0
-</span>
-
+        <div class="card dashboard-last-card">
+            <p class="dashboard-eyebrow">Actividad reciente</p>
+            <div id="lastWorkout"></div>
+            <button
+                type="button"
+                class="secondary-btn dashboard-action"
+                data-dashboard-tab="calendar"
+            >
+                Abrir calendario
+            </button>
         </div>
 
     </div>
 
-    <div class="card">
+    <div class="dashboard-metrics-grid">
 
-        <h3>
+        <div class="dashboard-metric-card">
+            <span>Sesiones esta semana</span>
+            <strong id="weeklySessions">0</strong>
+        </div>
 
-            Entrenamiento del Día
+        <div class="dashboard-metric-card">
+            <span>Volumen semanal</span>
+            <strong id="weeklyVolume">0 kg</strong>
+        </div>
 
-        </h3>
+        <div class="dashboard-metric-card">
+            <span>Sesiones este mes</span>
+            <strong id="monthlySessions">0</strong>
+        </div>
 
-        <div id="todayWorkout"></div>
-
-    </div>
-
-    <div class="card">
-
-        <h3>
-
-            Última Sesión
-
-        </h3>
-
-        <div id="lastWorkout"></div>
-
-    </div>
-
-    <div class="card">
-
-        <h3>
-
-            Récords Personales
-
-        </h3>
-
-        <div id="prContainer"></div>
+        <div class="dashboard-metric-card">
+            <span>Volumen mensual</span>
+            <strong id="monthlyVolume">0 kg</strong>
+        </div>
 
     </div>
 
-    <div class="card">
+    <div class="dashboard-main-grid">
 
-        <h3>
+        <div class="card dashboard-insight-card">
+            <h3>Progreso semanal</h3>
+            <div id="weeklyComparison"></div>
+        </div>
 
-            Resumen Semanal
+        <div class="card dashboard-insight-card">
+            <h3>Último récord</h3>
+            <div id="dashboardLatestPR"></div>
+        </div>
 
-        </h3>
+        <div class="card dashboard-insight-card">
+            <h3>Peso corporal</h3>
+            <div id="dashboardBodySummary"></div>
+        </div>
 
-        <p>
-
-            Sesiones:
-            <span id="weeklySessions">
-                0
-            </span>
-
-        </p>
-
-        <p>
-
-            Volumen:
-            <span id="weeklyVolume">
-                0 kg
-            </span>
-
-        </p>
+        <div class="card dashboard-insight-card">
+            <h3>Próximo objetivo</h3>
+            <div id="dashboardGoal"></div>
+        </div>
 
     </div>
 
