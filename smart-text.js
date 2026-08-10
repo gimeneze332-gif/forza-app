@@ -33,6 +33,10 @@
         return Math.round((Number(value) + Number.EPSILON) * 10) / 10;
     }
 
+    function roundConfidence(value) {
+        return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+    }
+
     function dateKey(date = new Date()) {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     }
@@ -126,18 +130,26 @@
         let value = null;
         let unit = null;
         let explicit = false;
-        if (/\bmedia\s+taza\b/.test(normalized)) { value = 0.5; unit = "cup"; explicit = true; }
-        else if (/\bmedio\s+(?:vaso|yogur|huevo|tomate|platano|banana)\b/.test(normalized)) {
-            value = 0.5; unit = /vaso/.test(normalized) ? "glass" : "unit"; explicit = true;
+        if (/\b(?:medio|media)\s+taza\b/.test(normalized)) { value = 0.5; unit = "cup"; explicit = true; }
+        else if (/\b(?:medio|media)\b/.test(normalized)) {
+            value = 0.5;
+            unit = /\bvaso\b/.test(normalized) ? "glass" : (food.measures.unit ? "unit" : food.defaultQuantity.unit);
+            explicit = true;
         } else {
             const match = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(g|gr|gramos?|ml|mililitros?|unidades?|tazas?|cucharadas?|cucharaditas?|vasos?|rodajas?|rebanadas?|porciones?)?\b/);
             if (match) {
                 value = Number(match[1].replace(",", "."));
                 unit = match[2] ? unitAliases[match[2]] : (food.measures.unit ? "unit" : null);
                 explicit = Boolean(unit);
+            } else {
+                const wordMatch = normalized.match(/\b(un|una|uno|dos|tres)\s*(g|gr|gramos?|ml|mililitros?|unidades?|tazas?|cucharadas?|cucharaditas?|vasos?|rodajas?|rebanadas?|porciones?)?\b/);
+                if (wordMatch) {
+                    value = { un: 1, una: 1, uno: 1, dos: 2, tres: 3 }[wordMatch[1]];
+                    unit = wordMatch[2] ? unitAliases[wordMatch[2]] : (food.measures.unit ? "unit" : food.defaultQuantity.unit);
+                    explicit = true;
+                }
             }
         }
-        if (value == null && /^media\s+/.test(normalized)) { value = 0.5; unit = "unit"; explicit = true; }
 
         if (value != null && unit === "g") return { value, unit, grams: value, explicit, estimated: false };
         if (value != null && unit === "ml") return { value, unit, grams: value, explicit, estimated: false };
@@ -186,6 +198,8 @@
     function detectPreparation(text, food) {
         const normalized = normalizeText(text);
         const known = [
+            ["en freidora de aire", "air_fryer"], ["freidora de aire", "air_fryer"],
+            ["en air fryer", "air_fryer"], ["air fryer", "air_fryer"],
             ["a la plancha", "plancha"], ["plancha", "plancha"], ["al horno", "horno"],
             ["hervido", "hervido"], ["hervida", "hervido"], ["frito", "frito"], ["frita", "frita"],
             ["revuelto", "revuelto"], ["revueltos", "revuelto"]
@@ -200,17 +214,21 @@
         const quantity = options.quantity || quantityFromText(sourceText, food, memory.portions[food.id]);
         const preparation = detectPreparation(sourceText, food);
         const nutrition = nutritionFor(food, quantity.grams);
-        let finalConfidence = confidence;
+        let finalConfidence = Math.min(confidence, food.confidenceCap || 1);
         if (quantity.estimated) finalConfidence -= 0.16;
+        if (food.relevantPreparation && !preparation.preparation) finalConfidence -= 0.12;
+        if (food.variable) finalConfidence -= 0.08;
         if (preparation.ambiguous) finalConfidence -= 0.22;
+        const estimated = Boolean(quantity.estimated || food.variable);
         return {
             catalogId: food.id, name: food.name, sourceText,
             quantity: quantity.value, unit: quantity.unit, grams: quantity.grams,
             baseQuantity: quantity.value, baseGrams: quantity.grams,
-            explicitQuantity: quantity.explicit, estimated: quantity.estimated,
+            explicitQuantity: quantity.explicit, estimated,
+            quantityEstimated: quantity.estimated, nutritionEstimated: Boolean(food.variable),
             preparation: preparation.preparation,
-            confidence: round(Math.max(0, finalConfidence)),
-            requiresConfirmation: Boolean(quantity.estimated || preparation.ambiguous || finalConfidence < 0.85),
+            confidence: roundConfidence(Math.max(0, finalConfidence)),
+            requiresConfirmation: Boolean(estimated || preparation.ambiguous || finalConfidence < 0.85),
             preparationAmbiguous: preparation.ambiguous,
             ...nutrition
         };
@@ -285,7 +303,7 @@
         dish.components.forEach(component => {
             if (component.foodId) items.push(itemFromFood(foodById(component.foodId), rawText, memory, 0.86));
             else if (component.ambiguous) {
-                questions.push({ type: "food-choice", label: component.label, sourceText: component.label, choices: component.choices.map(id => ({ id, label: foodById(id).name })) });
+                questions.push({ type: "food-choice", label: component.label, sourceText: rawText, choices: component.choices.map(id => ({ id, label: foodById(id).name })) });
             }
         });
         return { rawText, normalizedText: normalized, items, unrecognized: [], totals: totalsFor(items), confidence: questions.length ? 0.55 : 0.72, dishId: dish.id, requiresConfirmation: true, questions };
@@ -315,9 +333,16 @@
             if (item.preparationAmbiguous) questions.push({ type: "preparation", label: `Confirmá la preparación de ${item.name}.`, itemId: item.catalogId });
         });
         const componentScores = items.map(item => item.confidence);
-        const confidence = componentScores.length ? round(componentScores.reduce((sum, value) => sum + value, 0) / componentScores.length) : 0;
+        let confidence = componentScores.length ? roundConfidence(componentScores.reduce((sum, value) => sum + value, 0) / componentScores.length) : 0;
+        if (unrecognized.length) confidence = roundConfidence(Math.max(0, confidence - .2));
+        const recognizedSubtotal = totalsFor(items);
+        const hasPartialTotal = Boolean(items.length && unrecognized.length);
         return {
-            rawText, normalizedText: normalizeText(rawText), items, unrecognized, totals: totalsFor(items), confidence,
+            rawText, normalizedText: normalizeText(rawText), items, unrecognized,
+            totals: hasPartialTotal ? totalsFor([]) : recognizedSubtotal,
+            recognizedSubtotal: hasPartialTotal ? recognizedSubtotal : null,
+            totalKind: hasPartialTotal ? "subtotal" : "total",
+            confidence,
             requiresConfirmation: Boolean(unrecognized.length || questions.length || items.some(item => item.requiresConfirmation)), questions
         };
     }

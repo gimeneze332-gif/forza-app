@@ -124,4 +124,86 @@ assert.throws(() => noCatalog.interpret("2 huevos"), /catálogo/i);
 const allSources = `${catalogSource}\n${engineSource}`;
 assert.equal(/forza_(workouts|routines|body|goal|darkmode|last_backup|data_updated_at)/.test(allSources), false);
 
+// Sprint de calibración: frases reales convertidas en regresiones permanentes.
+const calibratedMilanesaTart = api.interpret("milanesa de carne con tarta de choclo");
+assert.deepEqual(Array.from(calibratedMilanesaTart.items, item => item.catalogId), ["milanesa_beef", "corn_tart"]);
+assert.equal(calibratedMilanesaTart.unrecognized.length, 0);
+assert.equal(calibratedMilanesaTart.items.every(item => item.estimated), true);
+assert.equal(calibratedMilanesaTart.requiresConfirmation, true);
+
+const writtenOne = api.interpret("2 huevos y una banana");
+assert.deepEqual(Array.from(writtenOne.items, item => item.quantity), [2, 1]);
+assert.equal(writtenOne.items.every(item => item.explicitQuantity), true);
+
+const calibratedChickenRice = api.interpret("pollo con arroz");
+assert.deepEqual(Array.from(calibratedChickenRice.items, item => item.catalogId), ["chicken", "rice_cooked"]);
+assert.equal(calibratedChickenRice.items.every(item => item.estimated), true);
+
+const calibratedYogurt = api.interpret("yogur con avena y granola");
+assert.deepEqual(Array.from(calibratedYogurt.items, item => item.catalogId), ["yogurt", "oats", "granola"]);
+assert.equal(calibratedYogurt.requiresConfirmation, true);
+
+const tortillaCheese = api.interpret("tortilla de papa con queso");
+assert.deepEqual(Array.from(tortillaCheese.items, item => item.catalogId), ["potato_omelette", "cheese_generic"]);
+assert.equal(tortillaCheese.items[1].name, "Queso genérico");
+assert.equal(tortillaCheese.items[1].confidence, 0.6);
+assert.equal(tortillaCheese.items[1].estimated, true);
+
+const ambiguousBurger = api.interpret("hamburguesa con papas");
+assert.equal(ambiguousBurger.questions[0].type, "food-choice");
+assert.deepEqual(Array.from(ambiguousBurger.questions[0].choices, choice => choice.id), ["hamburger_simple", "hamburger_complete"]);
+assert.equal(ambiguousBurger.requiresConfirmation, true);
+
+const writtenTwoEggs = api.interpret("pechuga con tomate y dos huevos");
+assert.equal(writtenTwoEggs.items.find(item => item.catalogId === "egg").quantity, 2);
+assert.equal(writtenTwoEggs.items.find(item => item.catalogId === "egg").explicitQuantity, true);
+
+const calibrationMeal = api.createMealDefinition("Mi desayuno", calibratedYogurt.items, { id: "calibration-meal" });
+assert.equal(api.interpret("mi desayuno", { meals: [calibrationMeal] }).requiresConfirmation, true);
+assert.equal(api.interpret("lo de siempre", { entries: [oldEntry, { ...oldEntry, id: "old-3" }] }).requiresConfirmation, true);
+assert.equal(api.interpret("lo de ayer", { entries: [oldEntry], now: new Date("2026-08-07T12:00:00") }).requiresConfirmation, true);
+
+assert.equal(api.interpret("una banana").items[0].quantity, 1);
+assert.equal(api.interpret("una banana").items[0].explicitQuantity, true);
+assert.equal(api.interpret("dos huevos").items[0].quantity, 2);
+assert.equal(api.interpret("tres tostadas").items[0].quantity, 3);
+assert.equal(api.interpret("media banana").items[0].quantity, 0.5);
+
+const genericCheese = api.interpret("queso").items[0];
+assert.equal(genericCheese.catalogId, "cheese_generic");
+assert.equal(genericCheese.confidence, 0.6);
+assert.equal(genericCheese.estimated, true);
+assert.equal(api.interpret("queso cremoso").items[0].catalogId, "cheese_creamy");
+
+function resolveMilanesaPreparation(text) {
+    const result = api.interpret(text);
+    return api.resolveChoice(result, 0, "milanesa_beef", "normal").items.find(item => item.catalogId === "milanesa_beef");
+}
+
+const friedMilanesa = resolveMilanesaPreparation("milanesa frita");
+const bakedMilanesa = resolveMilanesaPreparation("milanesa al horno");
+const airFryerMilanesa = resolveMilanesaPreparation("milanesa en air fryer");
+assert.equal(friedMilanesa.preparation, "frita");
+assert.equal(bakedMilanesa.preparation, "horno");
+assert.equal(airFryerMilanesa.preparation, "air_fryer");
+assert.equal([friedMilanesa, bakedMilanesa, airFryerMilanesa].every(item => item.estimated && item.nutritionEstimated), true);
+assert.equal(api.interpret("milanesa de carne").items[0].confidence < friedMilanesa.confidence, true, "Falta de preparación reduce confianza");
+
+assert.equal(api.interpret("hamburguesa simple").items[0].catalogId, "hamburger_simple");
+assert.equal(api.interpret("hamburguesa completa").items[0].catalogId, "hamburger_complete");
+
+const partial = api.interpret("pollo con alimento lunar");
+assert.equal(partial.totalKind, "subtotal");
+assert.equal(partial.totals.calories, null, "Un subtotal nunca ocupa el total principal");
+assert.ok(partial.recognizedSubtotal.calories > 0);
+assert.deepEqual(Array.from(partial.unrecognized), ["alimento lunar"]);
+assert.equal(partial.requiresConfirmation, true);
+
+assert.equal(Number(String(genericCheese.confidence).split(".")[1]?.length || 0) <= 2, true);
+
+const serviceWorkerSource = fs.readFileSync("sw.js", "utf8");
+assert.ok(serviceWorkerSource.includes("forza-v2-smart-text-calibration-1"));
+assert.ok(serviceWorkerSource.includes('"./smart-text-catalog.js"'));
+assert.ok(serviceWorkerSource.includes('"./smart-text.js"'));
+
 console.log("FORZA Smart Text tests: OK");

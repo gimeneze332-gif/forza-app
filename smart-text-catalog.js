@@ -2,8 +2,8 @@
 (function (root) {
     "use strict";
 
-    const food = (id, name, aliases, nutrition, defaultQuantity, measures = {}, preparations = []) => ({
-        id, name, aliases, nutrition, defaultQuantity, measures, preparations
+    const food = (id, name, aliases, nutrition, defaultQuantity, measures = {}, preparations = [], options = {}) => ({
+        id, name, aliases, nutrition, defaultQuantity, measures, preparations, ...options
     });
 
     const catalog = [
@@ -22,11 +22,18 @@
         food("toast", "Tostada", ["tostada", "tostadas", "pan tostado"], { calories: 266, protein: 9, carbs: 49, fat: 3.2 }, { value: 1, unit: "unit", grams: 30 }, { unit: 30, slice: 30 }),
         food("bread", "Pan", ["pan", "rodaja de pan", "rebanada de pan"], { calories: 266, protein: 9, carbs: 49, fat: 3.2 }, { value: 1, unit: "slice", grams: 30 }, { unit: 30, slice: 30 }),
         food("mashed_potato", "Puré de papa", ["pure", "puré", "pure de papa", "puré de papa"], { calories: 113, protein: 2, carbs: 17, fat: 4.2 }, { value: 1, unit: "portion", grams: 200 }, { cup: 210, tbsp: 15, portion: 200 }),
+        food("corn_tart", "Tarta de choclo", ["tarta de choclo", "tarta choclo"], { calories: 210, protein: 7, carbs: 27, fat: 8 }, { value: 1, unit: "portion", grams: 220 }, { portion: 220 }, [], { variable: true, confidenceCap: .68 }),
+        food("potato_omelette", "Tortilla de papa", ["tortilla de papa", "tortilla de papas"], { calories: 185, protein: 6, carbs: 19, fat: 10 }, { value: 1, unit: "portion", grams: 200 }, { portion: 200 }, [], { variable: true, confidenceCap: .68 }),
+        food("cheese_generic", "Queso genérico", ["queso"], { calories: 300, protein: 19, carbs: 3, fat: 24 }, { value: 30, unit: "g", grams: 30 }, { slice: 25, tbsp: 15, portion: 30 }, [], { variable: true, confidenceCap: .84 }),
+        food("cheese_creamy", "Queso cremoso", ["queso cremoso"], { calories: 305, protein: 18, carbs: 2, fat: 25 }, { value: 30, unit: "g", grams: 30 }, { slice: 25, portion: 30 }),
+        food("cheese_fresh", "Queso fresco", ["queso fresco"], { calories: 260, protein: 18, carbs: 3, fat: 20 }, { value: 30, unit: "g", grams: 30 }, { slice: 25, portion: 30 }),
+        food("mozzarella", "Mozzarella", ["mozzarella", "muzzarella", "queso mozzarella", "queso muzzarella"], { calories: 280, protein: 22, carbs: 3, fat: 21 }, { value: 30, unit: "g", grams: 30 }, { slice: 25, portion: 30 }),
         food("fries", "Papas fritas", ["papas fritas", "papas", "fritas"], { calories: 312, protein: 3.4, carbs: 41, fat: 15 }, { value: 1, unit: "portion", grams: 150 }, { portion: 150, cup: 120 }, ["fritas"]),
-        food("milanesa_beef", "Milanesa de carne", ["milanesa de carne"], { calories: 270, protein: 22, carbs: 15, fat: 14 }, { value: 1, unit: "unit", grams: 150 }, { unit: 150, portion: 150 }, ["horno", "frita"]),
-        food("milanesa_chicken", "Milanesa de pollo", ["milanesa de pollo"], { calories: 240, protein: 25, carbs: 15, fat: 9 }, { value: 1, unit: "unit", grams: 150 }, { unit: 150, portion: 150 }, ["horno", "frita"]),
+        food("milanesa_beef", "Milanesa de carne", ["milanesa de carne"], { calories: 270, protein: 22, carbs: 15, fat: 14 }, { value: 1, unit: "unit", grams: 150 }, { unit: 150, portion: 150 }, ["horno", "frita", "air_fryer"], { variable: true, relevantPreparation: true, confidenceCap: .78 }),
+        food("milanesa_chicken", "Milanesa de pollo", ["milanesa de pollo"], { calories: 240, protein: 25, carbs: 15, fat: 9 }, { value: 1, unit: "unit", grams: 150 }, { unit: 150, portion: 150 }, ["horno", "frita", "air_fryer"], { variable: true, relevantPreparation: true, confidenceCap: .78 }),
         food("pizza_mozzarella", "Pizza de mozzarella", ["pizza", "pizza de mozzarella", "pizza muzzarella"], { calories: 266, protein: 11, carbs: 33, fat: 10 }, { value: 2, unit: "portion", grams: 200 }, { portion: 100, slice: 100 }),
-        food("hamburger", "Hamburguesa completa", ["hamburguesa", "hamburguesa completa"], { calories: 250, protein: 13, carbs: 25, fat: 11 }, { value: 1, unit: "unit", grams: 220 }, { unit: 220, portion: 220 })
+        food("hamburger_simple", "Hamburguesa simple", ["hamburguesa simple"], { calories: 235, protein: 15, carbs: 20, fat: 10 }, { value: 1, unit: "unit", grams: 160 }, { unit: 160, portion: 160 }, [], { variable: true, confidenceCap: .72 }),
+        food("hamburger_complete", "Hamburguesa completa", ["hamburguesa completa"], { calories: 250, protein: 13, carbs: 25, fat: 11 }, { value: 1, unit: "unit", grams: 220 }, { unit: 220, portion: 220 }, [], { variable: true, confidenceCap: .72 })
     ];
 
     const dishes = [
@@ -41,13 +48,26 @@
         {
             id: "hamburger_fries",
             aliases: ["hamburguesa con papas", "hamburguesa con papas fritas"],
-            components: [{ foodId: "hamburger" }, { foodId: "fries" }]
+            components: [
+                { ambiguous: true, label: "Hamburguesa", choices: ["hamburger_simple", "hamburger_complete"] },
+                { foodId: "fries" }
+            ]
+        },
+        {
+            id: "hamburger_generic",
+            aliases: ["hamburguesa"],
+            components: [{ ambiguous: true, label: "Hamburguesa", choices: ["hamburger_simple", "hamburger_complete"] }]
+        },
+        {
+            id: "milanesa_generic",
+            aliases: ["milanesa", "milanesa frita", "milanesa al horno", "milanesa en air fryer", "milanesa en freidora de aire"],
+            components: [{ ambiguous: true, label: "Milanesa", choices: ["milanesa_beef", "milanesa_chicken"] }]
         }
     ];
 
     root.ForzaSmartText = {
         __catalog: Object.freeze({
-            version: 1,
+            version: 2,
             foods: Object.freeze(catalog),
             dishes: Object.freeze(dishes)
         })
