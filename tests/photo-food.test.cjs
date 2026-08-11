@@ -9,6 +9,19 @@ vm.createContext(context);
 vm.runInContext(source, context);
 const api = context.globalThis.ForzaPhotoFood;
 
+function memoryIndexedDb() {
+  const values = new Map();
+  return { values, api: { open() {
+    const request = {}; const database = { objectStoreNames: { contains: () => true }, createObjectStore() {}, close() {},
+      transaction() { return { objectStore() { return {
+        get(key) { const operation = {}; queueMicrotask(() => { operation.result = values.get(key); operation.onsuccess?.(); }); return operation; },
+        put(value, key) { const operation = {}; queueMicrotask(() => { values.set(key, value); operation.onsuccess?.(); }); return operation; },
+        delete(key) { const operation = {}; queueMicrotask(() => { values.delete(key); operation.onsuccess?.(); }); return operation; }
+      }; } }; } };
+    queueMicrotask(() => { request.result = database; request.onsuccess?.(); }); return request;
+  } } };
+}
+
 assert.ok(api, "Photo Food expone una sola API aislada");
 assert.equal(api.PHOTO_FOOD_MODE, "mock");
 assert.equal(api.MAX_EDGE, 768);
@@ -16,6 +29,21 @@ assert.equal(api.MAX_BYTES, 750 * 1024);
 assert.equal(typeof api.processImage, "function");
 
 (async () => {
+  const privateDb = memoryIndexedDb(); context.globalThis.indexedDB = privateDb.api;
+  await api.saveDeviceToken("device-test-token"); assert.equal(await api.getDeviceToken(), "device-test-token");
+  await api.clearDeviceToken(); assert.equal(await api.getDeviceToken(), undefined, "el token revocable se elimina de IndexedDB");
+
+  const remoteDb = memoryIndexedDb(); const remoteCalls = [];
+  const remoteRoot = { FORZA_PHOTO_FOOD_CONFIG: { mode: "remote", endpoint: "https://worker.test/" }, indexedDB: remoteDb.api,
+    fetch: async (url, options) => { remoteCalls.push({ url, options }); return { ok: true, status: 200, json: async () => ({ items: [], uncertainties: [] }) }; },
+    setTimeout, clearTimeout, AbortController, URL, JSON };
+  const remoteContext = { console, JSON, Number, String, Object, Array, Math, Promise, AbortController, globalThis: remoteRoot, window: remoteRoot };
+  vm.createContext(remoteContext); vm.runInContext(source, remoteContext); const remoteApi = remoteRoot.ForzaPhotoFood;
+  assert.equal(remoteApi.PHOTO_FOOD_MODE, "remote"); assert.equal(remoteApi.REMOTE_ENDPOINT, "https://worker.test");
+  await remoteApi.saveDeviceToken("remote-token");
+  assert.deepEqual(JSON.parse(JSON.stringify(await remoteApi.remoteAnalyze({}, "success"))), { items: [], uncertainties: [] });
+  assert.equal(remoteCalls[0].options.headers.authorization, "Bearer remote-token");
+
   for (const scenario of ["chicken-rice", "milanesa-puree", "tortilla", "unknown", "low-confidence"]) {
     const proposal = await api.mockAnalyze(scenario);
     assert.equal(api.validateResponse(proposal), true, `${scenario} cumple el contrato futuro`);
@@ -40,7 +68,11 @@ assert.equal(typeof api.processImage, "function");
   const sw = fs.readFileSync("sw.js", "utf8");
   assert.ok(sw.includes('"./photo-food.js"') && sw.includes('"./photo-food.css"'));
   assert.match(sw, /blob:\|data:/);
-  assert.equal(/localStorage|indexedDB|caches\./.test(source), false, "Photo Food no persiste imágenes ni datos propios");
+  assert.equal(/localStorage|caches\./.test(source), false, "Photo Food no usa LocalStorage ni Cache Storage");
   assert.equal(source.includes("GEMINI_API_KEY"), false);
+  assert.ok(source.includes("indexedDB"), "el token remoto usa IndexedDB");
+  assert.equal(source.includes("localStorage"), false, "el token remoto nunca usa LocalStorage");
+  assert.ok(source.includes('RUNTIME_CONFIG.mode === "remote"'));
+  assert.ok(source.includes("AbortController"));
   console.log("FORZA Photo Food tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

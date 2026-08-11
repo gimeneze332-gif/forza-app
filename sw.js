@@ -1,4 +1,4 @@
-const CACHE_NAME = "forza-v2-smart-text-calibration-1-photo-food-mock-1";
+const CACHE_NAME = "forza-v2-smart-text-calibration-1-photo-food-remote-ready-1";
 
 const urlsToCache = [
   "./",

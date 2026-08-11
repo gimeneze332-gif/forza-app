@@ -2,7 +2,11 @@
 (function (root) {
     "use strict";
 
-    const PHOTO_FOOD_MODE = "mock";
+    const RUNTIME_CONFIG = root.FORZA_PHOTO_FOOD_CONFIG || {};
+    const PHOTO_FOOD_MODE = RUNTIME_CONFIG.mode === "remote" ? "remote" : "mock";
+    const REMOTE_ENDPOINT = String(RUNTIME_CONFIG.endpoint || "").replace(/\/$/, "");
+    const AUTH_DB = "forza_photo_food_private";
+    const AUTH_STORE = "auth";
     const MAX_EDGE = 768;
     const MAX_BYTES = 750 * 1024;
     const MOCK_DELAY = 650;
@@ -35,6 +39,7 @@
     let previewUrl = null;
     let proposal = null;
     let analyzing = false;
+    let activeController = null;
 
     function clone(value) { return JSON.parse(JSON.stringify(value)); }
     function get(id) { return document.getElementById(`photo-food-${id}`); }
@@ -57,6 +62,57 @@
         if (scenario === "invalid-response") return Promise.resolve({ foods: "invalid" });
         return Promise.resolve(clone(MOCKS[scenario] || MOCKS["chicken-rice"]));
     }
+
+    function authDatabase() {
+        return new Promise((resolve, reject) => {
+            if (!root.indexedDB) return reject(new Error("indexeddb_unavailable"));
+            const request = root.indexedDB.open(AUTH_DB, 1);
+            request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains(AUTH_STORE)) request.result.createObjectStore(AUTH_STORE); };
+            request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error || new Error("indexeddb_error"));
+        });
+    }
+    async function authValue(action, value) {
+        const database = await authDatabase();
+        try {
+            return await new Promise((resolve, reject) => {
+                const transaction = database.transaction(AUTH_STORE, "readwrite"); const store = transaction.objectStore(AUTH_STORE);
+                const request = action === "get" ? store.get("deviceToken") : action === "put" ? store.put(value, "deviceToken") : store.delete("deviceToken");
+                request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error || new Error("indexeddb_error"));
+            });
+        } finally { database.close(); }
+    }
+    const getDeviceToken = () => authValue("get");
+    const saveDeviceToken = token => authValue("put", String(token));
+    const clearDeviceToken = () => authValue("delete");
+
+    async function claimPairing(code) {
+        if (!REMOTE_ENDPOINT) throw new Error("remote_not_configured");
+        const response = await root.fetch(`${REMOTE_ENDPOINT}/pairing/claim`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: String(code || "").trim() }) });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || !body.token) throw new Error(body.error || "pairing_failed");
+        await saveDeviceToken(body.token); return true;
+    }
+
+    async function remoteAnalyze(blob, scenario = "success", timeoutMs = 12000) {
+        if (!REMOTE_ENDPOINT) throw new Error("remote_not_configured");
+        const token = await getDeviceToken(); if (!token) throw new Error("unauthorized");
+        activeController = new AbortController();
+        const timer = root.setTimeout(() => activeController.abort(), timeoutMs);
+        try {
+            const response = await root.fetch(`${REMOTE_ENDPOINT}/photo-food/analyze`, { method: "POST", headers: {
+                authorization: `Bearer ${token}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": scenario
+            }, body: blob, signal: activeController.signal });
+            const body = await response.json().catch(() => ({}));
+            if (response.status === 401 || response.status === 403) { await clearDeviceToken(); throw new Error("unauthorized"); }
+            if (response.status === 429) throw new Error(body.error || "rate_limit");
+            if (response.status === 503) throw new Error(body.error || "service_unavailable");
+            if (!response.ok) throw new Error(body.error || "remote_error");
+            return body;
+        } catch (error) {
+            if (error.name === "AbortError") throw new Error("timeout");
+            throw error;
+        } finally { root.clearTimeout(timer); activeController = null; }
+    }
     function itemToText(item) {
         const grams = Number(item.estimatedGrams);
         const quantity = Number.isFinite(grams) && grams > 0 ? `${Math.round(grams)} g de ` : "";
@@ -77,13 +133,38 @@
         ["picker", "previewStep", "loading", "review", "error"].forEach(key => { elements[key].hidden = key !== name; });
     }
     function reset() {
+        if (activeController) activeController.abort();
         analyzing = false; proposal = null; releaseImage();
         if (elements) {
             elements.cameraInput.value = ""; elements.galleryInput.value = ""; elements.addText.value = "";
             showStep("picker");
         }
     }
-    function open() { if (!elements) return; elements.view.hidden = false; reset(); elements.camera.focus(); }
+    async function showPairing() {
+        showStep("picker");
+        let panel = elements.view.querySelector(".photo-food-pairing");
+        if (!panel) {
+            panel = document.createElement("div"); panel.className = "photo-food-pairing";
+            panel.innerHTML = '<h3>Vincular este dispositivo</h3><p class="photo-food-hint">Ingresá el código temporal generado en Cloudflare.</p><label>Código de emparejamiento<input inputmode="numeric" maxlength="8" autocomplete="one-time-code"></label><button class="nutrition-primary-button" type="button">Vincular</button><p role="status" aria-live="polite"></p>';
+            elements.view.appendChild(panel);
+            panel.querySelector("button").addEventListener("click", async () => {
+                const status = panel.querySelector('[role="status"]'); const button = panel.querySelector("button"); button.disabled = true; status.textContent = "Vinculando...";
+                try { await claimPairing(panel.querySelector("input").value); panel.remove(); reset(); elements.camera.focus(); }
+                catch (_) { status.textContent = "No pude vincular el dispositivo. Revisá el código."; }
+                finally { button.disabled = false; }
+            });
+        }
+        [elements.picker, elements.previewStep, elements.loading, elements.review, elements.error].forEach(item => { item.hidden = true; });
+        panel.hidden = false; panel.querySelector("input").focus();
+    }
+    async function open() {
+        if (!elements) return; elements.view.hidden = false; reset();
+        if (PHOTO_FOOD_MODE === "remote") {
+            try { if (!await getDeviceToken()) return showPairing(); }
+            catch (_) { return showError("Este dispositivo no puede guardar la autorización de Photo Food."); }
+        }
+        elements.camera.focus();
+    }
     function hide() { if (!elements) return; elements.view.hidden = true; reset(); }
 
     function canvasBlob(canvas, quality) {
@@ -149,20 +230,29 @@
         analyzing = true; showStep("loading");
         try {
             const scenario = elements.scenario.value;
-            if (scenario === "timeout") await new Promise(resolve => root.setTimeout(resolve, 900));
-            else await new Promise(resolve => root.setTimeout(resolve, MOCK_DELAY));
-            const result = await mockAnalyze(scenario);
+            let result;
+            if (PHOTO_FOOD_MODE === "remote") result = await remoteAnalyze(processedBlob, scenario === "service-error" ? "error" : scenario);
+            else {
+                if (scenario === "timeout") await new Promise(resolve => root.setTimeout(resolve, 900));
+                else await new Promise(resolve => root.setTimeout(resolve, MOCK_DELAY));
+                result = await mockAnalyze(scenario);
+            }
             if (!validateResponse(result)) throw new Error("invalid_response");
             proposal = result; proposal.items.forEach(item => { item._baseGrams = item.estimatedGrams; });
             analyzing = false; renderItems(); showStep("review"); elements.use.focus(); releaseImage();
         } catch (error) {
-            showError(error.message === "timeout" ? "El análisis tardó demasiado. No se reintentó automáticamente." : "La respuesta simulada no pudo utilizarse.");
+            const detail = error.message === "timeout" ? "El análisis tardó demasiado. No se reintentó automáticamente."
+                : error.message === "unauthorized" ? "Este dispositivo debe volver a vincularse."
+                : ["daily_limit", "monthly_limit", "rate_limit", "analysis_in_progress"].includes(error.message) ? "Se alcanzó temporalmente el límite de análisis."
+                : error.message === "photo_food_disabled" ? "Photo Food está desactivado temporalmente."
+                : "La respuesta no pudo utilizarse.";
+            showError(detail);
         }
     }
     function useProposal() {
         const text = proposalToText(proposal, elements.addText.value);
         if (!text) return showError("No quedó ningún alimento para revisar.");
-        const meta = { recognition: "photo-food-mock-v1", visualItems: proposal.items.map(item => ({
+        const meta = { recognition: PHOTO_FOOD_MODE === "remote" ? "photo-food-remote-mock-v1" : "photo-food-mock-v1", visualItems: proposal.items.map(item => ({
             name: item.name, preparation: item.preparation || null, estimatedPortion: item.estimatedPortion || null,
             estimatedGrams: item.estimatedGrams ?? null, foodConfidence: item.foodConfidence, quantityConfidence: item.quantityConfidence
         })) };
@@ -177,14 +267,14 @@
         if (!elements.view) return false;
         elements.camera.addEventListener("click", () => elements.cameraInput.click()); elements.gallery.addEventListener("click", () => elements.galleryInput.click());
         [elements.cameraInput, elements.galleryInput].forEach(input => input.addEventListener("change", () => input.files?.[0] && selectFile(input.files[0])));
-        elements.analyze.addEventListener("click", analyze); elements.change.addEventListener("click", reset); elements.cancel.addEventListener("click", () => callbacks.onFallback?.());
+        elements.analyze.addEventListener("click", analyze); elements.change.addEventListener("click", reset); elements.cancel.addEventListener("click", () => { if (activeController) activeController.abort(); callbacks.onFallback?.(); });
         elements.retry.addEventListener("click", () => processedBlob ? (showStep("previewStep"), elements.analyze.focus()) : reset());
         elements.fallback.addEventListener("click", () => callbacks.onFallback?.()); elements.use.addEventListener("click", useProposal);
         elements.add.addEventListener("click", () => { const name = elements.addText.value.trim(); if (!name) return; proposal.items.push({ name, preparation: null, estimatedPortion: null, estimatedGrams: null, foodConfidence: null, quantityConfidence: null, notes: "agregado por el usuario" }); elements.addText.value = ""; renderItems(); });
         reset(); return true;
     }
 
-    const api = Object.freeze({ PHOTO_FOOD_MODE, MAX_EDGE, MAX_BYTES, init, open, hide, reset, validateResponse, mockAnalyze, proposalToText, processImage });
+    const api = Object.freeze({ PHOTO_FOOD_MODE, REMOTE_ENDPOINT, MAX_EDGE, MAX_BYTES, init, open, hide, reset, validateResponse, mockAnalyze, remoteAnalyze, claimPairing, getDeviceToken, saveDeviceToken, clearDeviceToken, proposalToText, processImage });
     root.ForzaPhotoFood = api;
     if (typeof module !== "undefined" && module.exports) module.exports = api;
 }(typeof window !== "undefined" ? window : globalThis));

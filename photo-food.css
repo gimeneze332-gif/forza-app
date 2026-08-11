@@ -24,5 +24,9 @@
 .photo-food-add-row .photo-food-secondary { padding: 0 14px; }
 .photo-food-error { padding: 20px 0; text-align: center; }
 .photo-food-error p { color: var(--text-secondary, #64748b); }
+.photo-food-pairing { display: grid; gap: 12px; }
+.photo-food-pairing h3, .photo-food-pairing p { margin: 0; }
+.photo-food-pairing label { display: grid; gap: 7px; font-weight: 700; }
+.photo-food-pairing input { min-height: 50px; width: 100%; border: 1px solid rgba(148,163,184,.55); border-radius: 12px; padding: 10px 12px; background: var(--card-bg,#fff); color: inherit; font: inherit; font-size: 1.15rem; letter-spacing: .12em; }
 @media (min-width: 480px) { .photo-food-actions { grid-template-columns: repeat(2, minmax(0,1fr)); } .photo-food-actions > :last-child:nth-child(3) { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { .photo-food-spinner { animation: none; } }

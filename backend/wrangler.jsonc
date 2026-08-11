@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "forza-photo-food",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-11",
+  "workers_dev": true,
+  "vars": {
+    "PHOTO_FOOD_ENABLED": "false",
+    "ALLOWED_ORIGIN": "https://gimeneze332-gif.github.io"
+  },
+  "secrets": {
+    "required": ["PAIRING_ADMIN_SECRET"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "PHOTO_FOOD_STATE", "class_name": "PhotoFoodState" }
+    ]
+  },
+  "exports": {
+    "PhotoFoodState": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "observability": { "enabled": false }
+}
