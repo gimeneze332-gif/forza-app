@@ -1,4 +1,4 @@
-const CACHE_NAME = "forza-v2-smart-text-calibration-1";
+const CACHE_NAME = "forza-v2-smart-text-calibration-1-photo-food-mock-1";
 
 const urlsToCache = [
   "./",
@@ -6,8 +6,10 @@ const urlsToCache = [
   "./style.css",
   "./script.js",
   "./nutrition.css",
+  "./photo-food.css",
   "./smart-text-catalog.js",
   "./smart-text.js",
+  "./photo-food.js",
   "./nutrition.js",
   "./manifest.json",
   "./img/logo-forza.png"
@@ -36,6 +38,7 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+  if (/^(blob:|data:)/i.test(event.request.url)) return;
 
   event.respondWith(
     fetch(event.request)

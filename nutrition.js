@@ -369,6 +369,7 @@
         el.modal.classList.remove("is-open");
         document.body.style.overflow = "";
         draft = null;
+        if (window.ForzaPhotoFood?.reset) window.ForzaPhotoFood.reset();
         closeTimer = window.setTimeout(() => {
             el.modal.hidden = true;
             if (returnFocus && typeof returnFocus.focus === "function") returnFocus.focus();
@@ -378,10 +379,18 @@
 
     function entryMode(mode) {
         const frequent = mode === "frequent";
-        el.textView.hidden = frequent;
+        const photo = mode === "photo";
+        el.textView.hidden = frequent || photo;
         el.frequentView.hidden = !frequent;
+        if (el.photoView) el.photoView.hidden = !photo;
         el.optionButtons.forEach(button => button.classList.toggle("active", button.dataset.nutritionView === mode));
-        if (frequent) renderFrequent(); else el.mealText.focus();
+        if (photo) {
+            try { window.ForzaPhotoFood?.open(); }
+            catch (error) { console.warn("Photo Food no pudo iniciarse. Nutrition continúa disponible.", error); entryMode("text"); }
+        } else {
+            if (window.ForzaPhotoFood?.hide) window.ForzaPhotoFood.hide();
+            if (frequent) renderFrequent(); else el.mealText.focus();
+        }
     }
 
     function renderFrequent() {
@@ -409,18 +418,17 @@
         });
     }
 
-    function review() {
-        const text = el.mealText.value.trim();
+    function reviewText(text, metadata = {}) {
         if (!text) { el.feedback.textContent = "Escribí qué comiste."; el.mealText.focus(); return; }
         const api = smartTextApi();
         if (api) {
             try {
-                draft = { ...api.interpret(text, { entries, meals, memory: smartMemory, now: new Date() }), smartText: true };
+                draft = { ...api.interpret(text, { entries, meals, memory: smartMemory, now: new Date() }), smartText: true, ...metadata };
             } catch (error) {
                 console.warn("Smart Text no pudo interpretar la comida. Se usará el reconocimiento básico.", error);
-                draft = parseMealText(text);
+                draft = { ...parseMealText(text), ...metadata };
             }
-        } else draft = parseMealText(text);
+        } else draft = { ...parseMealText(text), ...metadata };
         el.originalText.textContent = draft.rawText;
         fillReviewTotals();
         el.reviewFavorite.checked = false;
@@ -429,6 +437,8 @@
         el.feedback.textContent = "";
         show("review"); el.reviewCalories.focus();
     }
+
+    function review() { reviewText(el.mealText.value.trim()); }
 
     function saveSettings(event) {
         event.preventDefault();
@@ -452,7 +462,7 @@
             calories: el.reviewCalories.value, protein: el.reviewProtein.value,
             carbs: el.reviewCarbs.value, fat: el.reviewFat.value,
             source: "text", isFavorite: el.reviewFavorite.checked,
-            recognition: draft.smartText ? "smart-text-v1" : undefined,
+            recognition: draft.recognition || (draft.smartText ? "smart-text-v1" : undefined),
             contextType: draft.contextType, confidence: draft.confidence
         });
         const mealName = el.reviewMealName.value.trim();
@@ -478,7 +488,7 @@
             sheetTitle: get("sheet-title"), setup: get("setup"), entry: get("entry"), reviewView: get("review-view"),
             settingsForm: get("settings-form"), calorieGoal: get("calorie-goal"), proteinGoal: get("protein-goal"), waterGoal: get("water-goal"),
             editGoals: get("edit-goals"), addWater: get("add-water"), optionButtons: document.querySelectorAll("[data-nutrition-view]"),
-            textView: get("text-view"), frequentView: get("frequent-view"), mealText: get("meal-text"), review: get("review"),
+            textView: get("text-view"), frequentView: get("frequent-view"), photoView: document.getElementById("photo-food-view"), mealText: get("meal-text"), review: get("review"),
             frequentList: get("frequent-list"), reviewBack: get("review-back"), originalText: get("original-text"), recognitionNote: get("recognition-note"),
             saveForm: get("save-form"), reviewCalories: get("review-calories"), reviewProtein: get("review-protein"),
             reviewCarbs: get("review-carbs"), reviewFat: get("review-fat"), reviewFavorite: get("review-favorite"),
@@ -513,6 +523,16 @@
         el.reviewBack.addEventListener("click", () => show("entry"));
         el.saveForm.addEventListener("submit", saveReviewed);
         document.addEventListener("keydown", event => { if (event.key === "Escape" && !el.modal.hidden) close(); });
+        try {
+            window.ForzaPhotoFood?.init({
+                onProposal(text, metadata) { el.mealText.value = text; reviewText(text, metadata); },
+                onFallback() { entryMode("text"); }
+            });
+        } catch (error) {
+            console.warn("Photo Food no pudo iniciarse. Nutrition y Gym continúan disponibles.", error);
+            const button = Array.from(el.optionButtons).find(item => item.dataset.nutritionView === "photo");
+            if (button) button.hidden = true;
+        }
         renderCard();
     }
 

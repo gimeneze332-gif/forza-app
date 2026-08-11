@@ -128,6 +128,8 @@ assert.equal(html.includes('id="nutrition-status"'), false);
 assert.ok(source.includes("+250 ml"));
 assert.ok(source.includes("Comida registrada"));
 assert.ok(html.includes('id="nutrition-review-meal-name"'));
+assert.ok(html.includes('data-nutrition-view="photo"'));
+assert.ok(source.includes('recognition: draft.recognition ||'));
 
 const serviceWorker = fs.readFileSync("sw.js", "utf8");
 assert.ok(serviceWorker.includes('"./smart-text-catalog.js"'));

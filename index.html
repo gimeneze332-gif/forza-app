@@ -34,6 +34,7 @@
         rel="stylesheet"
         href="nutrition.css"
     >
+    <link rel="stylesheet" href="photo-food.css">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -1000,7 +1001,7 @@
             <div class="nutrition-option-row" role="group" aria-label="Tipo de registro">
                 <button class="nutrition-option active" type="button" data-nutrition-view="text">Escribir</button>
                 <button class="nutrition-option" type="button" data-nutrition-view="frequent">Frecuentes</button>
-                <button class="nutrition-option" type="button" disabled>Foto · Próximamente</button>
+                <button class="nutrition-option" type="button" data-nutrition-view="photo">Foto</button>
             </div>
 
             <div id="nutrition-text-view">
@@ -1015,6 +1016,66 @@
 
             <div id="nutrition-frequent-view" hidden>
                 <div id="nutrition-frequent-list" class="nutrition-frequent-list"></div>
+            </div>
+
+            <div id="photo-food-view" class="photo-food" hidden>
+                <div class="photo-food-mode" aria-label="Función en modo de prueba">Modo de prueba</div>
+                <div id="photo-food-picker" class="photo-food-picker">
+                    <p>Elegí cómo agregar la foto de tu comida.</p>
+                    <div class="photo-food-actions">
+                        <button id="photo-food-camera" class="nutrition-primary-button" type="button">Sacar foto</button>
+                        <button id="photo-food-gallery" class="photo-food-secondary" type="button">Elegir foto</button>
+                    </div>
+                    <input id="photo-food-camera-input" type="file" accept="image/*" capture="environment" hidden>
+                    <input id="photo-food-gallery-input" type="file" accept="image/*" hidden>
+                </div>
+
+                <div id="photo-food-preview-step" hidden>
+                    <img id="photo-food-preview" class="photo-food-preview" alt="Vista previa de la comida">
+                    <label class="photo-food-scenario">Caso simulado
+                        <select id="photo-food-scenario-select">
+                            <option value="chicken-rice">Pollo con arroz</option>
+                            <option value="milanesa-puree">Milanesa con puré</option>
+                            <option value="tortilla">Tortilla de papa</option>
+                            <option value="unknown">Componente desconocido</option>
+                            <option value="low-confidence">Baja confianza</option>
+                            <option value="service-error">Error de servicio</option>
+                            <option value="timeout">Timeout</option>
+                            <option value="invalid-response">Respuesta inválida</option>
+                        </select>
+                    </label>
+                    <div class="photo-food-actions">
+                        <button id="photo-food-analyze" class="nutrition-primary-button" type="button">Analizar foto</button>
+                        <button id="photo-food-change" class="photo-food-secondary" type="button">Cambiar</button>
+                        <button id="photo-food-cancel" class="photo-food-text" type="button">Cancelar</button>
+                    </div>
+                </div>
+
+                <div id="photo-food-loading" class="photo-food-loading" role="status" aria-live="polite" hidden>
+                    <span class="photo-food-spinner" aria-hidden="true"></span>
+                    <strong>Analizando...</strong>
+                    <small>La imagen permanece solo en memoria.</small>
+                </div>
+
+                <div id="photo-food-review" hidden>
+                    <h3>Revisá lo que veo</h3>
+                    <p class="photo-food-hint">Las cantidades son aproximadas. Confirmá antes de continuar.</p>
+                    <div id="photo-food-items" class="photo-food-items"></div>
+                    <label class="photo-food-add-label">Agregar otro alimento
+                        <div class="photo-food-add-row">
+                            <input id="photo-food-add-text" type="text" placeholder="Ej.: tomate">
+                            <button id="photo-food-add" class="photo-food-secondary" type="button">Agregar</button>
+                        </div>
+                    </label>
+                    <button id="photo-food-use" class="nutrition-primary-button" type="button">Continuar con estos alimentos</button>
+                </div>
+
+                <div id="photo-food-error" class="photo-food-error" role="alert" hidden>
+                    <strong>No pude analizar la foto</strong>
+                    <p id="photo-food-error-detail">Podés escribir la comida y continuar normalmente.</p>
+                    <button id="photo-food-fallback" class="nutrition-primary-button" type="button">Escribir qué comí</button>
+                    <button id="photo-food-retry" class="photo-food-secondary" type="button">Reintentar</button>
+                </div>
             </div>
         </div>
 
@@ -1058,6 +1119,7 @@
 <script src="script.js"></script>
 <script src="smart-text-catalog.js"></script>
 <script src="smart-text.js"></script>
+<script src="photo-food.js"></script>
 <script src="nutrition.js"></script>
 <script>
 
