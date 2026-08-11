@@ -42,10 +42,13 @@ export function createHandler() {
     const origin = request.headers.get("origin");
     if (origin && !cors) return json({ error: "origin_not_allowed", requestId }, 403);
     if (request.method === "OPTIONS") return cors ? new Response(null, { status: 204, headers: cors }) : json({ error: "origin_not_allowed", requestId }, 403);
-    if (request.method !== "POST") return json({ error: "method_not_allowed", requestId }, 405, cors);
-    if (env.PHOTO_FOOD_ENABLED !== "true") return json({ error: "photo_food_disabled", requestId }, 503, cors);
-
     const url = new URL(request.url);
+    if (env.BACKEND_ENABLED !== "true") return json({ error: "backend_disabled", requestId }, 503, cors);
+    if (url.pathname === "/health") {
+      if (request.method !== "GET") return json({ error: "method_not_allowed", requestId }, 405, cors);
+      return json({ status: "ok", analysisEnabled: env.PHOTO_ANALYSIS_ENABLED === "true", provider: "mock" }, 200, cors);
+    }
+    if (request.method !== "POST") return json({ error: "method_not_allowed", requestId }, 405, cors);
     if (url.pathname === "/pairing/create") {
       if (!constantTimeEqual(bearerToken(request), env.PAIRING_ADMIN_SECRET)) return json({ error: "forbidden", requestId }, 403, cors);
       const response = await stateRequest(env, "/pairing/create", { method: "POST" });
@@ -62,6 +65,7 @@ export function createHandler() {
       return json(await response.json(), response.status, cors);
     }
     if (url.pathname !== "/photo-food/analyze") return json({ error: "not_found", requestId }, 404, cors);
+    if (env.PHOTO_ANALYSIS_ENABLED !== "true") return json({ error: "photo_analysis_disabled", requestId }, 503, cors);
 
     const headerCheck = validateImageHeaders(request);
     if (!headerCheck.valid) return json({ error: headerCheck.error, requestId }, headerCheck.status, cors);

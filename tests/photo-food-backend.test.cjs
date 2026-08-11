@@ -15,18 +15,23 @@ class MemoryStorage {
   const storage = new MemoryStorage();
   const durable = new PhotoFoodState({ storage });
   const env = {
-    PHOTO_FOOD_ENABLED: "true", ALLOWED_ORIGIN: "https://gimeneze332-gif.github.io", PAIRING_ADMIN_SECRET: "admin-test-only",
+    BACKEND_ENABLED: "true", PHOTO_ANALYSIS_ENABLED: "false", ALLOWED_ORIGIN: "https://gimeneze332-gif.github.io", PAIRING_ADMIN_SECRET: "admin-test-only",
     PHOTO_FOOD_STATE: { idFromName: () => "personal", get: () => ({ fetch: (url, init) => durable.fetch(new Request(url, init)) }) }
   };
   const handle = createHandler();
   const origin = env.ALLOWED_ORIGIN;
   const call = (path, init = {}) => handle(new Request(`https://worker.test${path}`, { method: "POST", ...init, headers: { origin, ...(init.headers || {}) } }), env);
 
-  let response = await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } });
+  let response = await handle(new Request("https://worker.test/health", { method: "GET", headers: { origin } }), env);
+  assert.equal(response.status, 200, "healthcheck disponible con backend habilitado");
+  assert.deepEqual(await response.json(), { status: "ok", analysisEnabled: false, provider: "mock" });
+  assert.equal((await call("/photo-food/analyze", { headers: { authorization: "Bearer no-token", "content-type": "image/jpeg" }, body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]) })).status, 503, "análisis apagado responde 503");
+
+  response = await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } });
   assert.equal(response.status, 200, "pairing válido");
   const pairing = await response.json(); assert.match(pairing.code, /^\d{8}$/);
   response = await call("/pairing/claim", { headers: { "content-type": "application/json" }, body: JSON.stringify({ code: pairing.code }) });
-  assert.equal(response.status, 200); const token = (await response.json()).token; assert.equal(typeof token, "string");
+  assert.equal(response.status, 200, "pairing permitido con análisis apagado"); const token = (await response.json()).token; assert.equal(typeof token, "string");
   assert.equal((await call("/pairing/claim", { headers: { "content-type": "application/json" }, body: JSON.stringify({ code: pairing.code }) })).status, 410, "pairing usado");
 
   await durable.fetch(new Request("https://state.internal/pairing/create", { method: "POST" }));
@@ -35,6 +40,7 @@ class MemoryStorage {
 
   const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
   const analyze = auth => call("/photo-food/analyze", { headers: { authorization: `Bearer ${auth}`, "content-type": "image/jpeg" }, body: jpeg });
+  env.PHOTO_ANALYSIS_ENABLED = "true";
   assert.equal((await analyze("bad-token")).status, 401, "token inválido");
 
   // Restore a valid token through a fresh pairing.
@@ -61,17 +67,27 @@ class MemoryStorage {
   assert.equal((await handle(new Request("https://worker.test/photo-food/analyze", { method: "GET", headers: { origin } }), env)).status, 405);
   assert.equal((await handle(new Request("https://worker.test/photo-food/analyze", { method: "OPTIONS", headers: { origin } }), env)).status, 204);
   assert.equal((await handle(new Request("https://worker.test/photo-food/analyze", { method: "OPTIONS", headers: { origin: "https://evil.example" } }), env)).status, 403);
-  env.PHOTO_FOOD_ENABLED = "false"; assert.equal((await analyze(validToken)).status, 503, "kill switch"); env.PHOTO_FOOD_ENABLED = "true";
+  env.PHOTO_ANALYSIS_ENABLED = "false"; assert.equal((await analyze(validToken)).status, 503, "kill switch exclusivo del análisis");
+  assert.equal((await call("/device/revoke", { headers: { authorization: `Bearer ${validToken}` } })).status, 200, "revocación sigue disponible con análisis apagado");
+  env.PHOTO_ANALYSIS_ENABLED = "true";
+
+  // Pair another device after the revocation so remaining provider tests stay authorized.
+  response = await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } }); const code3 = (await response.json()).code;
+  response = await call("/pairing/claim", { headers: { "content-type": "application/json" }, body: JSON.stringify({ code: code3 }) }); const providerToken = (await response.json()).token;
 
   state = await storage.get("state"); state.perMinute = 0; state.busy = false; state.daily = 0; state.monthly = 0; await storage.put("state", state);
-  assert.equal((await call("/photo-food/analyze", { headers: { authorization: `Bearer ${validToken}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": "error" }, body: jpeg })).status, 503, "error mock");
+  assert.equal((await call("/photo-food/analyze", { headers: { authorization: `Bearer ${providerToken}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": "error" }, body: jpeg })).status, 503, "error mock");
   state = await storage.get("state"); state.perMinute = 0; await storage.put("state", state);
-  assert.equal((await call("/photo-food/analyze", { headers: { authorization: `Bearer ${validToken}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": "invalid-response" }, body: jpeg })).status, 502, "respuesta inválida");
+  assert.equal((await call("/photo-food/analyze", { headers: { authorization: `Bearer ${providerToken}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": "invalid-response" }, body: jpeg })).status, 502, "respuesta inválida");
   state = await storage.get("state"); state.perMinute = 0; state.busy = false; await storage.put("state", state);
-  assert.equal((await call("/photo-food/analyze", { headers: { authorization: `Bearer ${validToken}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": "timeout" }, body: jpeg })).status, 504, "timeout controlado");
+  assert.equal((await call("/photo-food/analyze", { headers: { authorization: `Bearer ${providerToken}`, "content-type": "image/jpeg", "x-photo-food-mock-scenario": "timeout" }, body: jpeg })).status, 504, "timeout controlado");
 
-  response = await call("/device/revoke", { headers: { authorization: `Bearer ${validToken}` } }); assert.equal(response.status, 200);
-  assert.equal((await analyze(validToken)).status, 401, "revocación");
+  response = await call("/device/revoke", { headers: { authorization: `Bearer ${providerToken}` } }); assert.equal(response.status, 200);
+  assert.equal((await analyze(providerToken)).status, 401, "revocación");
+
+  env.BACKEND_ENABLED = "false";
+  assert.equal((await handle(new Request("https://worker.test/health", { method: "GET", headers: { origin } }), env)).status, 503, "backend completamente apagado");
+  assert.equal((await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } })).status, 503);
 
   const logged = []; const safe = safeLog({ requestId: "id", status: 200, token: "secret", code: "123", body: "photo", foods: ["pollo"] }, { log: value => logged.push(value) });
   assert.deepEqual(Object.keys(safe).sort(), ["requestId", "status"]); assert.equal(logged[0].includes("secret"), false, "logs sin datos sensibles");

@@ -59,14 +59,17 @@ assert.equal(typeof api.processImage, "function");
   assert.equal(api.validateResponse({ items: [{ name: "pollo", foodConfidence: 2 }], uncertainties: [] }), false);
 
   const html = fs.readFileSync("index.html", "utf8");
+  const configSource = fs.readFileSync("photo-food-config.js", "utf8");
   assert.match(html, /capture="environment"/);
   assert.ok(html.includes("Modo de prueba"));
   assert.ok(html.includes("No pude analizar la foto"));
   assert.ok(html.indexOf('<script src="script.js"></script>') < html.indexOf('<script src="photo-food.js"></script>'));
+  assert.ok(html.indexOf('<script src="photo-food-config.js"></script>') < html.indexOf('<script src="photo-food.js"></script>'));
   assert.ok(html.indexOf('<script src="photo-food.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'));
 
   const sw = fs.readFileSync("sw.js", "utf8");
   assert.ok(sw.includes('"./photo-food.js"') && sw.includes('"./photo-food.css"'));
+  assert.ok(sw.includes('"./photo-food-config.js"'));
   assert.match(sw, /blob:\|data:/);
   assert.equal(/localStorage|caches\./.test(source), false, "Photo Food no usa LocalStorage ni Cache Storage");
   assert.equal(source.includes("GEMINI_API_KEY"), false);
@@ -74,5 +77,8 @@ assert.equal(typeof api.processImage, "function");
   assert.equal(source.includes("localStorage"), false, "el token remoto nunca usa LocalStorage");
   assert.ok(source.includes('RUNTIME_CONFIG.mode === "remote"'));
   assert.ok(source.includes("AbortController"));
+  assert.match(configSource, /mode:\s*"mock"/);
+  assert.match(configSource, /endpoint:\s*""/);
+  assert.equal(/token|secret|api.?key/i.test(configSource.replace(/No colocar secretos/, "")), false, "la configuración pública no contiene credenciales");
   console.log("FORZA Photo Food tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });
