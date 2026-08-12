@@ -12,7 +12,8 @@ class MemoryStorage {
 (async () => {
   const deploymentConfig = fs.readFileSync("backend/wrangler.jsonc", "utf8");
   assert.match(deploymentConfig, /"BACKEND_ENABLED":\s*"true"/);
-  assert.match(deploymentConfig, /"PHOTO_ANALYSIS_ENABLED":\s*"true"/);
+  assert.match(deploymentConfig, /"PHOTO_ANALYSIS_ENABLED":\s*"false"/);
+  assert.match(deploymentConfig, /"PHOTO_FOOD_PROVIDER":\s*"mock"/);
   const { createHandler } = await import("../backend/src/index.js");
   const { PhotoFoodState } = await import("../backend/src/photo-food-state.js");
   const { safeLog } = await import("../backend/src/logging.js");

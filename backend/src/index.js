@@ -3,9 +3,10 @@ import { validateImageHeaders, validateJpeg, MAX_IMAGE_BYTES } from "./image-val
 import { normalizeVisualProposal } from "./schema.js";
 import { safeLog } from "./logging.js";
 import { analyzeMock } from "./mock-provider.js";
+import { analyzeFoodImage } from "./gemini-adapter.js";
 export { PhotoFoodState } from "./photo-food-state.js";
 
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 12000;
 
 function corsHeaders(request, env) {
   const origin = request.headers.get("origin") || "";
@@ -27,11 +28,21 @@ async function stateRequest(env, path, init = {}) {
   return env.PHOTO_FOOD_STATE.get(id).fetch(`https://state.internal${path}`, init);
 }
 
-async function timeout(promise, milliseconds = TIMEOUT_MS) {
-  let timer;
+export async function runProvider(provider, bytes, env, request, scenario) {
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  request.signal?.addEventListener("abort", cancel, { once: true });
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), milliseconds); })]);
-  } finally { clearTimeout(timer); }
+    const operation = provider === "mock"
+      ? analyzeMock(scenario).then(proposal => ({ proposal, usage: null, model: "mock" }))
+      : provider === "gemini"
+        ? env.GEMINI_API_KEY ? analyzeFoodImage(bytes, { apiKey: env.GEMINI_API_KEY, signal: controller.signal }) : Promise.reject(new Error("gemini_disabled"))
+        : Promise.reject(new Error("invalid_provider"));
+    return await Promise.race([operation, new Promise((_, reject) => controller.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true }))]);
+  }
+  catch (error) { if (error.name === "AbortError") throw new Error("timeout"); throw error; }
+  finally { clearTimeout(timer); request.signal?.removeEventListener("abort", cancel); }
 }
 
 export function createHandler() {
@@ -46,7 +57,7 @@ export function createHandler() {
     if (env.BACKEND_ENABLED !== "true") return json({ error: "backend_disabled", requestId }, 503, cors);
     if (url.pathname === "/health") {
       if (request.method !== "GET") return json({ error: "method_not_allowed", requestId }, 405, cors);
-      return json({ status: "ok", analysisEnabled: env.PHOTO_ANALYSIS_ENABLED === "true", provider: "mock" }, 200, cors);
+      return json({ status: "ok", analysisEnabled: env.PHOTO_ANALYSIS_ENABLED === "true", provider: env.PHOTO_FOOD_PROVIDER || "mock" }, 200, cors);
     }
     if (request.method !== "POST") return json({ error: "method_not_allowed", requestId }, 405, cors);
     if (url.pathname === "/pairing/create") {
@@ -71,23 +82,28 @@ export function createHandler() {
     if (!headerCheck.valid) return json({ error: headerCheck.error, requestId }, headerCheck.status, cors);
     const auth = await stateRequest(env, "/analysis/start", { method: "POST", headers: { authorization: `Bearer ${bearerToken(request)}` } });
     if (!auth.ok) return json(await auth.json(), auth.status, cors);
-    let size = 0; let componentCount = 0; let status = 200; let genericError = null;
+    const provider = env.PHOTO_FOOD_PROVIDER || "mock";
+    let size = 0; let componentCount = 0; let status = 200; let genericError = null; let usage = null; let model = provider;
     try {
       const bytes = new Uint8Array(await request.arrayBuffer()); size = bytes.length;
       if (size > MAX_IMAGE_BYTES) { status = 413; genericError = "image_too_large"; return json({ error: genericError, requestId }, status, cors); }
       if (!validateJpeg(bytes)) { status = 400; genericError = "invalid_image"; return json({ error: genericError, requestId }, status, cors); }
       const scenario = request.headers.get("x-photo-food-mock-scenario") || "success";
-      const raw = await timeout(analyzeMock(scenario));
-      const result = normalizeVisualProposal(raw); componentCount = result.items.length;
+      const analyzed = await runProvider(provider, bytes, env, request, scenario);
+      usage = analyzed.usage; model = analyzed.model;
+      const result = normalizeVisualProposal(analyzed.proposal); componentCount = result.items.length;
       return json(result, 200, cors);
     } catch (error) {
-      status = error.message === "timeout" ? 504 : error.message === "invalid_provider_response" ? 502 : 503;
-      genericError = error.message === "timeout" ? "analysis_timeout" : error.message === "invalid_provider_response" ? "invalid_provider_response" : "analysis_failed";
+      const providerRateLimit = error.message === "provider_rate_limit";
+      const providerContract = ["provider_invalid_json", "provider_empty_response", "invalid_provider_response"].includes(error.message);
+      status = error.message === "timeout" ? 504 : providerRateLimit ? 429 : providerContract ? 502 : error.message === "invalid_provider" ? 503 : 503;
+      genericError = error.message === "timeout" ? "analysis_timeout" : providerRateLimit ? "provider_rate_limit" : providerContract ? "invalid_provider_response" : error.message === "invalid_provider" ? "provider_disabled" : "analysis_failed";
       return json({ error: genericError, requestId }, status, cors);
     } finally {
       const finish = await stateRequest(env, "/analysis/finish", { method: "POST" });
       const quota = await finish.json().catch(() => ({}));
-      safeLog({ requestId, timestamp: new Date().toISOString(), status, durationMs: Date.now() - started, size, componentCount, quotaRemaining: quota.dailyRemaining, error: genericError });
+      safeLog({ requestId, timestamp: new Date().toISOString(), status, durationMs: Date.now() - started, size, componentCount, quotaRemaining: quota.dailyRemaining, error: genericError, provider, model,
+        inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens });
     }
   };
 }

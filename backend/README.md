@@ -1,18 +1,21 @@
-# FORZA Photo Food Worker — Etapa 2A.1
+# FORZA Photo Food Worker — Etapa 2B preparada
 
-Backend remoto para Cloudflare Workers Free con proveedor mock. No llama a Gemini ni contiene claves de proveedores visuales.
+Backend remoto para Cloudflare Workers Free con adaptadores mock y Gemini. La configuración versionada mantiene el análisis apagado y el proveedor mock, por lo que no produce consumo real.
 
 ## Configuración incluida
 
 - `BACKEND_ENABLED=true`: permite healthcheck, pairing, revocación y análisis sujeto al segundo interruptor.
-- `PHOTO_ANALYSIS_ENABLED=false`: mantiene `/photo-food/analyze` apagado durante el primer despliegue.
+- `PHOTO_ANALYSIS_ENABLED=false`: mantiene `/photo-food/analyze` apagado hasta una prueba aprobada.
+- `PHOTO_FOOD_PROVIDER=mock`: selecciona el adaptador backend; el cliente no puede elegir proveedor.
 - `ALLOWED_ORIGIN=https://gimeneze332-gif.github.io`: único origen web autorizado mediante CORS.
 - Durable Object SQLite `PhotoFoodState`: guarda hashes, expiración, revocación y contadores.
 - `workers_dev=true`: Cloudflare asignará una URL bajo `workers.dev`; no hace falta comprar un dominio.
 
-## Único secreto manual
+## Secretos manuales
 
 `PAIRING_ADMIN_SECRET` debe ser una contraseña aleatoria y exclusiva de al menos 32 caracteres. Se carga interactivamente en Cloudflare y nunca se guarda en Git, `.env`, el frontend, la PWA ni capturas de pantalla.
+
+`GEMINI_API_KEY` se agregará únicamente después de configurar una cuenta paga de Gemini y aprobar una prueba. Nunca se almacena en archivos versionados ni se devuelve al cliente.
 
 ## Endpoints
 
@@ -144,6 +147,8 @@ BACKEND_ENABLED=true
 PHOTO_ANALYSIS_ENABLED=false
 ```
 
-## Estado del proveedor
+## Estado de proveedores
 
-El proveedor activo sigue siendo `mock-provider.js`. `gemini-adapter.js` permanece desactivado y arroja `provider_not_configured` si alguien intenta usarlo.
+`mock-provider.js` sigue disponible para pruebas y recuperación. `gemini-adapter.js` implementa una llamada stateless a `gemini-2.5-flash` con una imagen JPEG inline, JSON Schema estricto, temperatura baja y pensamiento desactivado. Gemini solamente identifica elementos visibles; Smart Text continúa calculando toda la nutrición localmente.
+
+Para una primera prueba controlada, el orden seguro es: cargar `GEMINI_API_KEY`, comprobar que el análisis continúa apagado, cambiar `PHOTO_FOOD_PROVIDER` a `gemini`, desplegar, y finalmente activar `PHOTO_ANALYSIS_ENABLED=true` solo durante la prueba. Para detenerla inmediatamente, volver a `PHOTO_ANALYSIS_ENABLED=false` y desplegar.

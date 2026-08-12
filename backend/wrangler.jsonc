@@ -6,7 +6,8 @@
   "workers_dev": true,
   "vars": {
     "BACKEND_ENABLED": "true",
-    "PHOTO_ANALYSIS_ENABLED": "true",
+    "PHOTO_ANALYSIS_ENABLED": "false",
+    "PHOTO_FOOD_PROVIDER": "mock",
     "ALLOWED_ORIGIN": "https://gimeneze332-gif.github.io"
   },
   "secrets": {
