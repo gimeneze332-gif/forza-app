@@ -24,6 +24,10 @@
     color: var(--primary);
 }
 
+.nutrition-review-title:focus {
+    outline: none;
+}
+
 .nutrition-eyebrow {
     margin: 0 0 4px;
     color: #6B7280;
@@ -284,8 +288,36 @@
 
 .nutrition-review-form .nutrition-favorite-check,
 .nutrition-review-form .nutrition-meal-name,
+.nutrition-secondary-options,
 .nutrition-save-action {
     grid-column: 1 / -1;
+}
+
+.nutrition-secondary-options {
+    margin-top: 2px;
+    border-top: 1px solid #E5E7EB;
+}
+
+.nutrition-secondary-options summary {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    color: var(--primary);
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.nutrition-secondary-options summary:focus-visible {
+    outline: 3px solid #65A30D;
+    outline-offset: 3px;
+}
+
+.nutrition-secondary-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+    padding-top: 6px;
 }
 
 #nutrition-settings-form .nutrition-primary-button,
@@ -472,6 +504,10 @@ body.dark-mode .nutrition-recognition-note {
     color: #CBD5E1;
 }
 
+body.dark-mode .nutrition-secondary-options {
+    border-color: #4B5563;
+}
+
 body.dark-mode .nutrition-recognition-note.warning {
     border-color: #A78016;
     background: #3A3217;
@@ -491,20 +527,17 @@ body.dark-mode .nutrition-recognition-note.warning {
         padding-left: max(18px, env(safe-area-inset-left));
     }
 
-    .nutrition-option-row {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .nutrition-option:disabled {
-        grid-column: 1 / -1;
-    }
-
     .nutrition-review-form {
+        grid-template-columns: 1fr;
+    }
+
+    .nutrition-secondary-fields {
         grid-template-columns: 1fr;
     }
 
     .nutrition-review-form .nutrition-favorite-check,
     .nutrition-review-form .nutrition-meal-name,
+    .nutrition-secondary-options,
     .nutrition-save-action {
         grid-column: auto;
     }

@@ -970,7 +970,6 @@
 
         <header class="nutrition-sheet-header">
             <div>
-                <p class="nutrition-eyebrow">Registro rápido</p>
                 <h2 id="nutrition-sheet-title">Registrar comida</h2>
             </div>
             <button id="nutrition-close" class="nutrition-icon-button" type="button" aria-label="Cerrar">×</button>
@@ -1019,9 +1018,8 @@
             </div>
 
             <div id="photo-food-view" class="photo-food" hidden>
-                <div class="photo-food-mode" aria-label="Función en modo de prueba">Modo de prueba</div>
                 <div id="photo-food-picker" class="photo-food-picker">
-                    <p>Elegí cómo agregar la foto de tu comida.</p>
+                    <p>Usá una foto clara de tu comida.</p>
                     <div class="photo-food-actions">
                         <button id="photo-food-camera" class="nutrition-primary-button" type="button">Sacar foto</button>
                         <button id="photo-food-gallery" class="photo-food-secondary" type="button">Elegir foto</button>
@@ -1032,34 +1030,22 @@
 
                 <div id="photo-food-preview-step" hidden>
                     <img id="photo-food-preview" class="photo-food-preview" alt="Vista previa de la comida">
-                    <label class="photo-food-scenario">Caso simulado
-                        <select id="photo-food-scenario-select">
-                            <option value="chicken-rice">Pollo con arroz</option>
-                            <option value="milanesa-puree">Milanesa con puré</option>
-                            <option value="tortilla">Tortilla de papa</option>
-                            <option value="unknown">Componente desconocido</option>
-                            <option value="low-confidence">Baja confianza</option>
-                            <option value="service-error">Error de servicio</option>
-                            <option value="timeout">Timeout</option>
-                            <option value="invalid-response">Respuesta inválida</option>
-                        </select>
-                    </label>
-                    <div class="photo-food-actions">
+                    <input id="photo-food-scenario-select" type="hidden" value="chicken-rice">
+                    <div class="photo-food-actions photo-food-preview-actions">
                         <button id="photo-food-analyze" class="nutrition-primary-button" type="button">Analizar foto</button>
-                        <button id="photo-food-change" class="photo-food-secondary" type="button">Cambiar</button>
+                        <button id="photo-food-change" class="photo-food-secondary" type="button">Cambiar foto</button>
                         <button id="photo-food-cancel" class="photo-food-text" type="button">Cancelar</button>
                     </div>
                 </div>
 
                 <div id="photo-food-loading" class="photo-food-loading" role="status" aria-live="polite" hidden>
                     <span class="photo-food-spinner" aria-hidden="true"></span>
-                    <strong>Analizando...</strong>
-                    <small>La imagen permanece solo en memoria.</small>
+                    <strong>Analizando foto…</strong>
                 </div>
 
                 <div id="photo-food-review" hidden>
-                    <h3>Revisá lo que veo</h3>
-                    <p class="photo-food-hint">Las cantidades son aproximadas. Confirmá antes de continuar.</p>
+                    <h3>Revisá los alimentos</h3>
+                    <p class="photo-food-hint">Corregí solamente lo que haga falta.</p>
                     <div id="photo-food-items" class="photo-food-items"></div>
                     <label class="photo-food-add-label">Agregar otro alimento
                         <div class="photo-food-add-row">
@@ -1067,7 +1053,7 @@
                             <button id="photo-food-add" class="photo-food-secondary" type="button">Agregar</button>
                         </div>
                     </label>
-                    <button id="photo-food-use" class="nutrition-primary-button" type="button">Continuar con estos alimentos</button>
+                    <button id="photo-food-use" class="nutrition-primary-button" type="button">Usar estos alimentos</button>
                 </div>
 
                 <div id="photo-food-error" class="photo-food-error" role="alert" hidden>
@@ -1081,7 +1067,7 @@
 
         <div id="nutrition-review-view" class="nutrition-view" hidden>
             <button id="nutrition-review-back" class="nutrition-text-button" type="button">← Volver</button>
-            <h3>Revisá antes de guardar</h3>
+            <h3 id="nutrition-review-title" class="nutrition-review-title" tabindex="-1">Revisá antes de guardar</h3>
             <p id="nutrition-original-text" class="nutrition-original-text"></p>
             <div id="nutrition-recognition-note" class="nutrition-recognition-note"></div>
             <button class="nutrition-primary-button nutrition-save-action" type="submit" form="nutrition-save-form">Guardar comida</button>
@@ -1094,19 +1080,24 @@
                 <label>Proteína (g)
                     <input id="nutrition-review-protein" type="number" min="0" step="0.1" inputmode="decimal" required>
                 </label>
-                <label>Carbohidratos (g) · opcional
-                    <input id="nutrition-review-carbs" type="number" min="0" step="0.1" inputmode="decimal">
-                </label>
-                <label>Grasas (g) · opcional
-                    <input id="nutrition-review-fat" type="number" min="0" step="0.1" inputmode="decimal">
-                </label>
-                <label class="nutrition-favorite-check">
-                    <input id="nutrition-review-favorite" type="checkbox">
-                    Guardar como comida frecuente
-                </label>
-                <label class="nutrition-meal-name">Nombre para reutilizar como Meal · opcional
-                    <input id="nutrition-review-meal-name" type="text" maxlength="60" placeholder="Ej.: Mi desayuno">
-                </label>
+                <details class="nutrition-secondary-options">
+                    <summary>Más opciones</summary>
+                    <div class="nutrition-secondary-fields">
+                        <label>Carbohidratos (g) · opcional
+                            <input id="nutrition-review-carbs" type="number" min="0" step="0.1" inputmode="decimal">
+                        </label>
+                        <label>Grasas (g) · opcional
+                            <input id="nutrition-review-fat" type="number" min="0" step="0.1" inputmode="decimal">
+                        </label>
+                        <label class="nutrition-favorite-check">
+                            <input id="nutrition-review-favorite" type="checkbox">
+                            Guardar como comida frecuente
+                        </label>
+                        <label class="nutrition-meal-name">Guardar esta comida con un nombre · opcional
+                            <input id="nutrition-review-meal-name" type="text" maxlength="60" placeholder="Ej.: Mi desayuno">
+                        </label>
+                    </div>
+                </details>
             </form>
         </div>
 

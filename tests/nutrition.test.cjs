@@ -129,6 +129,10 @@ assert.ok(source.includes("+250 ml"));
 assert.ok(source.includes("Comida registrada"));
 assert.ok(html.includes('id="nutrition-review-meal-name"'));
 assert.ok(html.includes('data-nutrition-view="photo"'));
+assert.ok(html.includes('class="nutrition-secondary-options"'));
+assert.equal(html.includes("Registro rápido"), false);
+assert.equal(source.includes("Catálogo local:"), false);
+assert.ok(source.includes("No pude reconocer esto"));
 assert.ok(source.includes('recognition: draft.recognition ||'));
 
 const serviceWorker = fs.readFileSync("sw.js", "utf8");

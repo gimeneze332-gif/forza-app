@@ -43,11 +43,14 @@
 
     function clone(value) { return JSON.parse(JSON.stringify(value)); }
     function get(id) { return document.getElementById(`photo-food-${id}`); }
-    function confidence(value) {
-        if (!Number.isFinite(Number(value))) return "Sin estimar";
-        if (value >= .8) return "Alta";
-        if (value >= .55) return "Media";
-        return "Baja";
+    function reviewHint(item) {
+        if (!Number.isFinite(Number(item.foodConfidence)) || Number(item.foodConfidence) < .55) {
+            return "No pude reconocer esto. Corregí el alimento.";
+        }
+        if (!Number.isFinite(Number(item.quantityConfidence)) || Number(item.quantityConfidence) < .7) {
+            return "Revisá la cantidad.";
+        }
+        return "";
     }
     function validateResponse(value) {
         if (!value || !Array.isArray(value.items) || !Array.isArray(value.uncertainties)) return false;
@@ -211,11 +214,12 @@
         elements.items.innerHTML = "";
         proposal.items.forEach((item, index) => {
             const card = document.createElement("article"); card.className = "photo-food-item";
-            card.innerHTML = `<div class="photo-food-item-grid"><label>Alimento<input data-field="name" value=""></label><label>≈ gramos<input data-field="grams" type="number" min="1" inputmode="numeric"></label></div><div class="photo-food-item-grid"><label>Preparación<input data-field="preparation" value="" placeholder="No visible"></label><label>Porción<select data-field="portion"><option value="small">Pequeña</option><option value="normal">Normal</option><option value="large">Grande</option></select></label></div><p class="photo-food-confidence"></p><button class="photo-food-remove" type="button">Eliminar</button>`;
+            card.innerHTML = `<div class="photo-food-item-grid"><label>Alimento<input data-field="name" value=""></label><label>Porción<select data-field="portion"><option value="small">Pequeña</option><option value="normal">Normal</option><option value="large">Grande</option></select></label></div><div class="photo-food-item-grid photo-food-item-secondary"><label>Preparación<input data-field="preparation" value="" placeholder="No visible"></label><label>Gramos aprox.<input data-field="grams" type="number" min="1" inputmode="numeric"></label></div><p class="photo-food-confidence"></p><button class="photo-food-remove" type="button">Eliminar</button>`;
             const name = card.querySelector('[data-field="name"]'); const grams = card.querySelector('[data-field="grams"]');
             const prep = card.querySelector('[data-field="preparation"]'); const portion = card.querySelector('[data-field="portion"]');
             name.value = item.name; grams.value = item.estimatedGrams ?? ""; prep.value = item.preparation || ""; portion.value = item.estimatedPortion || "normal";
-            card.querySelector(".photo-food-confidence").textContent = `Alimento: confianza ${confidence(item.foodConfidence)} · Cantidad: confianza ${confidence(item.quantityConfidence)}${item.notes ? ` · ${item.notes}` : ""}`;
+            const hint = card.querySelector(".photo-food-confidence");
+            hint.textContent = reviewHint(item); hint.hidden = !hint.textContent;
             name.addEventListener("input", () => { item.name = name.value; });
             grams.addEventListener("input", () => { item.estimatedGrams = grams.value ? Number(grams.value) : null; item._baseGrams = item.estimatedGrams; });
             prep.addEventListener("input", () => { item.preparation = prep.value.trim() || null; });

@@ -199,12 +199,6 @@
         el.reviewFat.value = value("fat");
     }
 
-    function confidenceLabel(value) {
-        if (value >= .85) return "Confianza alta";
-        if (value >= .6) return "Revisar";
-        return "Confirmación necesaria";
-    }
-
     function rememberItem(item) {
         const api = smartTextApi();
         if (!api || !item?.catalogId || !item?.sourceText) return;
@@ -246,8 +240,8 @@
                 const title = document.createElement("strong");
                 title.textContent = item.name || item.sourceText || "Componente";
                 const detail = document.createElement("span");
-                const quantity = item.grams ? `${item.grams} g` : "cantidad sin definir";
-                detail.textContent = `${quantity} · ${confidenceLabel(Number(item.confidence || 0))}${item.estimated ? " · estimado" : ""}`;
+                const quantity = item.grams ? `${item.grams} g` : "Cantidad pendiente";
+                detail.textContent = item.estimated ? `${quantity} · Revisá la cantidad` : quantity;
                 card.append(title, detail);
                 if (item.estimated) {
                     const sizes = document.createElement("div");
@@ -297,7 +291,7 @@
                 });
             } else if (question.type === "preparation") {
                 const button = document.createElement("button");
-                button.type = "button"; button.textContent = "Entendido, revisaré los valores";
+                button.type = "button"; button.textContent = "Confirmar y continuar";
                 button.addEventListener("click", () => {
                     draft.questions = draft.questions.filter((_, index) => index !== questionIndex);
                     renderSmartDetails(); renderRecognitionNote();
@@ -312,13 +306,13 @@
     function renderRecognitionNote() {
         const recognized = draft.items.map(item => item.name || item.sourceText);
         const warnings = [];
-        if (draft.unrecognized?.length) warnings.push(`Sin reconocer: ${draft.unrecognized.join(", ")}.`);
-        if (draft.requiresConfirmation) warnings.push("Revisá y confirmá antes de guardar.");
-        if (draft.contextType) warnings.push("La referencia contextual nunca se registra automáticamente.");
+        if (draft.unrecognized?.length) warnings.push(`No pude reconocer esto: ${draft.unrecognized.join(", ")}.`);
+        if (draft.requiresConfirmation) warnings.push("Revisá lo marcado antes de guardar.");
+        if (draft.contextType) warnings.push("Confirmá que sea la comida correcta.");
         el.recognitionNote.className = `nutrition-recognition-note${warnings.length ? " warning" : ""}`;
         el.recognitionNote.textContent = warnings.length
-            ? `${recognized.length ? `Reconocido: ${recognized.join(", ")}. ` : ""}${warnings.join(" ")}`
-            : `Catálogo local: ${recognized.join(", ")}. Revisá cantidades y valores antes de guardar.`;
+            ? warnings.join(" ")
+            : `Revisá ${recognized.length ? "los alimentos y " : ""}las cantidades antes de guardar.`;
     }
 
     function renderCard() {
@@ -346,6 +340,7 @@
         el.entry.hidden = view !== "entry";
         el.reviewView.hidden = view !== "review";
         el.sheetTitle.textContent = view === "setup" ? "Objetivos diarios" : "Registrar comida";
+        if (el.sheet) el.sheet.scrollTop = 0;
     }
 
     function open() {
@@ -435,7 +430,7 @@
         el.reviewMealName.value = "";
         renderRecognitionNote(); renderSmartDetails();
         el.feedback.textContent = "";
-        show("review"); el.reviewCalories.focus();
+        show("review"); el.reviewTitle?.focus({ preventScroll: true });
     }
 
     function review() { reviewText(el.mealText.value.trim()); }
@@ -485,11 +480,12 @@
         const get = name => document.getElementById(`nutrition-${name}`);
         return {
             modal: get("modal"), open: get("open"), close: get("close"), backdrop: get("backdrop"),
+            sheet: document.querySelector(".nutrition-sheet"),
             sheetTitle: get("sheet-title"), setup: get("setup"), entry: get("entry"), reviewView: get("review-view"),
             settingsForm: get("settings-form"), calorieGoal: get("calorie-goal"), proteinGoal: get("protein-goal"), waterGoal: get("water-goal"),
             editGoals: get("edit-goals"), addWater: get("add-water"), optionButtons: document.querySelectorAll("[data-nutrition-view]"),
             textView: get("text-view"), frequentView: get("frequent-view"), photoView: document.getElementById("photo-food-view"), mealText: get("meal-text"), review: get("review"),
-            frequentList: get("frequent-list"), reviewBack: get("review-back"), originalText: get("original-text"), recognitionNote: get("recognition-note"),
+            frequentList: get("frequent-list"), reviewBack: get("review-back"), reviewTitle: get("review-title"), originalText: get("original-text"), recognitionNote: get("recognition-note"),
             saveForm: get("save-form"), reviewCalories: get("review-calories"), reviewProtein: get("review-protein"),
             reviewCarbs: get("review-carbs"), reviewFat: get("review-fat"), reviewFavorite: get("review-favorite"),
             reviewMealName: get("review-meal-name"), smartDetails: get("smart-details"), saveAction: document.querySelector(".nutrition-save-action"), feedback: get("feedback"),
