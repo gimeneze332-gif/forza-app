@@ -22,5 +22,9 @@
   "exports": {
     "PhotoFoodState": { "type": "durable-object", "storage": "sqlite" }
   },
-  "observability": { "enabled": false }
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  }
 }

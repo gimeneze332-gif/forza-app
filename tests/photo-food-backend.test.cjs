@@ -14,6 +14,8 @@ class MemoryStorage {
   assert.match(deploymentConfig, /"BACKEND_ENABLED":\s*"true"/);
   assert.match(deploymentConfig, /"PHOTO_ANALYSIS_ENABLED":\s*"false"/);
   assert.match(deploymentConfig, /"PHOTO_FOOD_PROVIDER":\s*"mock"/);
+  assert.match(deploymentConfig, /"observability":\s*\{[\s\S]*?"enabled":\s*true/);
+  assert.match(deploymentConfig, /"invocation_logs":\s*false/);
   const { createHandler } = await import("../backend/src/index.js");
   const { PhotoFoodState } = await import("../backend/src/photo-food-state.js");
   const { safeLog } = await import("../backend/src/logging.js");
@@ -51,7 +53,12 @@ class MemoryStorage {
   // Restore a valid token through a fresh pairing.
   response = await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } }); const code2 = (await response.json()).code;
   response = await call("/pairing/claim", { headers: { "content-type": "application/json" }, body: JSON.stringify({ code: code2 }) }); const validToken = (await response.json()).token;
-  assert.equal((await analyze(validToken)).status, 200, "token válido");
+  const diagnosticLines = []; const originalConsoleLog = console.log; let validAnalysis;
+  try { console.log = line => diagnosticLines.push(String(line)); validAnalysis = await analyze(validToken); }
+  finally { console.log = originalConsoleLog; }
+  assert.equal(validAnalysis.status, 200, "token válido");
+  const diagnosticStages = diagnosticLines.map(line => { try { return JSON.parse(line).stage; } catch (_) { return null; } }).filter(Boolean);
+  assert.deepEqual(diagnosticStages, ["request_received", "normalization_completed", "analysis_completed"], "respuesta válida completa el diagnóstico");
 
   let quotaState = await storage.get("state"); quotaState.daily = 9; quotaState.day = new Date().toISOString().slice(0, 10); quotaState.monthly = 299; quotaState.month = new Date().toISOString().slice(0, 7); quotaState.perMinute = 0; quotaState.busy = false; await storage.put("state", quotaState);
   assert.equal((await analyze(validToken)).status, 200, "el análisis diario 10 y mensual 300 todavía se aceptan");

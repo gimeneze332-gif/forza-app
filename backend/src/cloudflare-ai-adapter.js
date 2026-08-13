@@ -17,13 +17,25 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
-function parseJsonAnswer(answer) {
+function diagnostic(options, stage, details = {}) { options.onDiagnostic?.({ stage, ...details }); }
+
+function parseJsonAnswer(answer, options) {
   if (answer && typeof answer === "object") return answer;
-  if (typeof answer !== "string" || !answer.trim()) throw new Error("provider_empty_response");
+  if (typeof answer !== "string" || !answer.trim()) {
+    diagnostic(options, "empty_response", { errorCode: "empty_response" });
+    throw new Error("empty_response");
+  }
   const cleaned = answer.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("provider_invalid_json");
-  try { return JSON.parse(cleaned.slice(start, end + 1)); } catch (_) { throw new Error("provider_invalid_json"); }
+  if (start < 0 || end < start) {
+    diagnostic(options, "json_extraction_failed", { errorCode: "json_extraction_failed" });
+    throw new Error("json_extraction_failed");
+  }
+  try { return JSON.parse(cleaned.slice(start, end + 1)); }
+  catch (_) {
+    diagnostic(options, "json_parse_failed", { errorCode: "json_parse_failed" });
+    throw new Error("json_parse_failed");
+  }
 }
 
 function normalizeUsage(metrics) {
@@ -41,18 +53,35 @@ export async function analyzeFoodImage(image, options = {}) {
   if (!options.ai || typeof options.ai.run !== "function") throw new Error("cloudflare_ai_disabled");
   const bytes = image instanceof Uint8Array ? image : new Uint8Array(image || []);
   if (!bytes.length) throw new Error("invalid_image");
+  const started = Date.now();
   let response;
+  diagnostic(options, "model_call_started");
   try {
     response = await options.ai.run(CLOUDFLARE_AI_MODEL, {
       task: "query", image: `data:image/jpeg;base64,${bytesToBase64(bytes)}`, question: PHOTO_FOOD_PROMPT,
       reasoning: false, temperature: 0.1, max_tokens: 700, stream: false
     });
-  } catch (error) { throw modelError(error); }
-  const proposal = parseJsonAnswer(response?.answer ?? response?.response ?? response);
-  if (!validateProviderProposal(proposal)) throw new Error("invalid_provider_response");
-  if (!proposal.items.length) throw new Error("no_food_detected");
-  if (proposal.items.every(item => Number(item.identityConfidence) < MIN_IDENTITY_CONFIDENCE)) throw new Error("low_confidence");
-  return { proposal, usage: normalizeUsage(response?.metrics), model: CLOUDFLARE_AI_MODEL };
+  } catch (error) {
+    const safeError = modelError(error);
+    diagnostic(options, "model_call_failed", { durationMs: Date.now() - started, errorCode: safeError.message });
+    throw safeError;
+  }
+  const usage = normalizeUsage(response?.metrics);
+  diagnostic(options, "model_call_completed", { durationMs: Date.now() - started, ...usage });
+  const proposal = parseJsonAnswer(response?.answer ?? response?.response ?? response, options);
+  if (!validateProviderProposal(proposal)) {
+    diagnostic(options, "schema_validation_failed", { errorCode: "schema_validation_failed" });
+    throw new Error("schema_validation_failed");
+  }
+  if (!proposal.items.length) {
+    diagnostic(options, "no_food", { errorCode: "no_food" });
+    throw new Error("no_food");
+  }
+  if (proposal.items.every(item => Number(item.identityConfidence) < MIN_IDENTITY_CONFIDENCE)) {
+    diagnostic(options, "low_confidence", { errorCode: "low_confidence" });
+    throw new Error("low_confidence");
+  }
+  return { proposal, usage, model: CLOUDFLARE_AI_MODEL };
 }
 
 export const analyzeWithCloudflareAI = analyzeFoodImage;

@@ -1,7 +1,7 @@
 import { bearerToken, constantTimeEqual } from "./auth.js";
 import { validateImageHeaders, validateJpeg, MAX_IMAGE_BYTES } from "./image-validation.js";
 import { normalizeVisualProposal } from "./schema.js";
-import { safeLog } from "./logging.js";
+import { safeLog, safeStageLog } from "./logging.js";
 import { analyzeMock } from "./mock-provider.js";
 import { analyzeFoodImage as analyzeWithGemini } from "./gemini-adapter.js";
 import { analyzeFoodImage as analyzeWithCloudflareAI } from "./cloudflare-ai-adapter.js";
@@ -29,7 +29,7 @@ async function stateRequest(env, path, init = {}) {
   return env.PHOTO_FOOD_STATE.get(id).fetch(`https://state.internal${path}`, init);
 }
 
-export async function runProvider(provider, bytes, env, request, scenario) {
+export async function runProvider(provider, bytes, env, request, scenario, diagnostics = {}) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   request.signal?.addEventListener("abort", cancel, { once: true });
@@ -40,7 +40,7 @@ export async function runProvider(provider, bytes, env, request, scenario) {
       : provider === "gemini"
         ? env.GEMINI_API_KEY ? analyzeWithGemini(bytes, { apiKey: env.GEMINI_API_KEY, signal: controller.signal }) : Promise.reject(new Error("gemini_disabled"))
         : provider === "cloudflare-ai"
-          ? analyzeWithCloudflareAI(bytes, { ai: env.AI })
+          ? analyzeWithCloudflareAI(bytes, { ai: env.AI, onDiagnostic: diagnostics.onDiagnostic })
         : Promise.reject(new Error("invalid_provider"));
     return await Promise.race([operation, new Promise((_, reject) => controller.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true }))]);
   }
@@ -92,13 +92,17 @@ export function createHandler() {
       if (size > MAX_IMAGE_BYTES) { status = 413; genericError = "image_too_large"; return json({ error: genericError, requestId }, status, cors); }
       if (!validateJpeg(bytes)) { status = 400; genericError = "invalid_image"; return json({ error: genericError, requestId }, status, cors); }
       const scenario = request.headers.get("x-photo-food-mock-scenario") || "success";
-      const analyzed = await runProvider(provider, bytes, env, request, scenario);
+      const onDiagnostic = details => safeStageLog({ requestId, provider, model: provider === "cloudflare-ai" ? "@cf/moondream/moondream3.1-9B-A2B" : provider, size, ...details });
+      onDiagnostic({ stage: "request_received" });
+      const analyzed = await runProvider(provider, bytes, env, request, scenario, { onDiagnostic });
       usage = analyzed.usage; model = analyzed.model;
       const result = normalizeVisualProposal(analyzed.proposal); componentCount = result.items.length;
+      onDiagnostic({ stage: "normalization_completed", durationMs: Date.now() - started });
+      onDiagnostic({ stage: "analysis_completed", durationMs: Date.now() - started, status: 200, inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, totalTokens: usage?.totalTokens, neurons: usage?.neurons });
       return json(result, 200, cors);
     } catch (error) {
       const providerRateLimit = error.message === "provider_rate_limit";
-      const providerContract = ["provider_invalid_json", "provider_empty_response", "invalid_provider_response", "no_food_detected", "low_confidence"].includes(error.message);
+      const providerContract = ["provider_invalid_json", "provider_empty_response", "invalid_provider_response", "no_food_detected", "empty_response", "json_extraction_failed", "json_parse_failed", "schema_validation_failed", "no_food", "low_confidence"].includes(error.message);
       status = error.message === "timeout" ? 504 : providerRateLimit ? 429 : providerContract ? 502 : error.message === "invalid_provider" ? 503 : 503;
       genericError = error.message === "timeout" ? "analysis_timeout" : providerRateLimit ? "provider_rate_limit" : providerContract ? "invalid_provider_response" : error.message === "invalid_provider" ? "provider_disabled" : "analysis_failed";
       return json({ error: genericError, requestId }, status, cors);
