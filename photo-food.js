@@ -208,7 +208,13 @@
             elements.preview.src = previewUrl; showStep("previewStep"); elements.analyze.focus();
         } catch (_) { showError("La imagen no pudo procesarse en este dispositivo."); }
     }
-    function showError(detail) { analyzing = false; elements.errorDetail.textContent = detail || "Podés escribir la comida y continuar normalmente."; showStep("error"); elements.fallback.focus(); releaseImage(); }
+    function showError() {
+        analyzing = false;
+        const title = elements.error.querySelector("strong");
+        if (title) title.textContent = "No pude reconocer bien esta foto.";
+        elements.errorDetail.textContent = "Podés escribir la comida y continuar.";
+        showStep("error"); elements.fallback.focus(); releaseImage();
+    }
 
     function renderItems() {
         elements.items.innerHTML = "";

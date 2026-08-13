@@ -3,7 +3,8 @@ import { validateImageHeaders, validateJpeg, MAX_IMAGE_BYTES } from "./image-val
 import { normalizeVisualProposal } from "./schema.js";
 import { safeLog } from "./logging.js";
 import { analyzeMock } from "./mock-provider.js";
-import { analyzeFoodImage } from "./gemini-adapter.js";
+import { analyzeFoodImage as analyzeWithGemini } from "./gemini-adapter.js";
+import { analyzeFoodImage as analyzeWithCloudflareAI } from "./cloudflare-ai-adapter.js";
 export { PhotoFoodState } from "./photo-food-state.js";
 
 const TIMEOUT_MS = 12000;
@@ -37,7 +38,9 @@ export async function runProvider(provider, bytes, env, request, scenario) {
     const operation = provider === "mock"
       ? analyzeMock(scenario).then(proposal => ({ proposal, usage: null, model: "mock" }))
       : provider === "gemini"
-        ? env.GEMINI_API_KEY ? analyzeFoodImage(bytes, { apiKey: env.GEMINI_API_KEY, signal: controller.signal }) : Promise.reject(new Error("gemini_disabled"))
+        ? env.GEMINI_API_KEY ? analyzeWithGemini(bytes, { apiKey: env.GEMINI_API_KEY, signal: controller.signal }) : Promise.reject(new Error("gemini_disabled"))
+        : provider === "cloudflare-ai"
+          ? analyzeWithCloudflareAI(bytes, { ai: env.AI })
         : Promise.reject(new Error("invalid_provider"));
     return await Promise.race([operation, new Promise((_, reject) => controller.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true }))]);
   }
@@ -95,7 +98,7 @@ export function createHandler() {
       return json(result, 200, cors);
     } catch (error) {
       const providerRateLimit = error.message === "provider_rate_limit";
-      const providerContract = ["provider_invalid_json", "provider_empty_response", "invalid_provider_response"].includes(error.message);
+      const providerContract = ["provider_invalid_json", "provider_empty_response", "invalid_provider_response", "no_food_detected", "low_confidence"].includes(error.message);
       status = error.message === "timeout" ? 504 : providerRateLimit ? 429 : providerContract ? 502 : error.message === "invalid_provider" ? 503 : 503;
       genericError = error.message === "timeout" ? "analysis_timeout" : providerRateLimit ? "provider_rate_limit" : providerContract ? "invalid_provider_response" : error.message === "invalid_provider" ? "provider_disabled" : "analysis_failed";
       return json({ error: genericError, requestId }, status, cors);
@@ -103,7 +106,7 @@ export function createHandler() {
       const finish = await stateRequest(env, "/analysis/finish", { method: "POST" });
       const quota = await finish.json().catch(() => ({}));
       safeLog({ requestId, timestamp: new Date().toISOString(), status, durationMs: Date.now() - started, size, componentCount, quotaRemaining: quota.dailyRemaining, error: genericError, provider, model,
-        inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens });
+        inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens, neurons: usage?.neurons });
     }
   };
 }

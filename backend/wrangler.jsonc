@@ -4,6 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-11",
   "workers_dev": true,
+  "ai": { "binding": "AI" },
   "vars": {
     "BACKEND_ENABLED": "true",
     "PHOTO_ANALYSIS_ENABLED": "false",

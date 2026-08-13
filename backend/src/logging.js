@@ -1,4 +1,4 @@
-const ALLOWED = new Set(["requestId", "timestamp", "status", "durationMs", "size", "componentCount", "quotaRemaining", "error", "provider", "model", "inputTokens", "outputTokens", "thinkingTokens", "totalTokens"]);
+const ALLOWED = new Set(["requestId", "timestamp", "status", "durationMs", "size", "componentCount", "quotaRemaining", "error", "provider", "model", "inputTokens", "outputTokens", "thinkingTokens", "totalTokens", "neurons"]);
 
 export function safeLog(details = {}, output = console) {
   const safe = {};

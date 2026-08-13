@@ -1,6 +1,10 @@
 # FORZA Photo Food Worker — Etapa 2B preparada
 
-Backend remoto para Cloudflare Workers Free con adaptadores mock y Gemini. La configuración versionada mantiene el análisis apagado y el proveedor mock, por lo que no produce consumo real.
+Backend remoto para Cloudflare Workers Free con adaptadores mock, Cloudflare Workers AI y Gemini. La configuración versionada mantiene el análisis apagado y el proveedor mock, por lo que no produce consumo real.
+
+## Proveedor experimental Cloudflare Workers AI
+
+El binding `AI` queda preparado para `@cf/moondream/moondream3.1-9B-A2B`. El adaptador recibe solamente el JPEG ya procesado, lo convierte temporalmente al formato requerido, solicita identificación visual y valida el contrato Photo Food v1. No calcula nutrientes, no persiste la imagen y no registra alimentos ni respuestas completas. El backend admite `mock`, `cloudflare-ai` y `gemini`; la configuración versionada continúa en `mock` y con `PHOTO_ANALYSIS_ENABLED=false`.
 
 ## Configuración incluida
 

@@ -67,6 +67,7 @@ assert.equal(typeof api.processImage, "function");
   assert.ok(html.includes("Analizando foto…"));
   assert.ok(html.includes("Usar estos alimentos"));
   assert.ok(html.includes("No pude analizar la foto"));
+  assert.ok(source.includes("No pude reconocer bien esta foto."), "fallback simple sin detalle técnico");
   assert.equal(source.includes("confianza ${confidence"), false, "la interfaz no muestra confianza técnica");
   assert.ok(html.indexOf('<script src="script.js"></script>') < html.indexOf('<script src="photo-food.js"></script>'));
   assert.ok(html.indexOf('<script src="photo-food-config.js"></script>') < html.indexOf('<script src="photo-food.js"></script>'));
