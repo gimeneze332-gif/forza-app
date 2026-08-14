@@ -2,6 +2,18 @@ import { validateProviderProposal } from "./schema.js";
 
 export const CLOUDFLARE_AI_MODEL = "@cf/moondream/moondream3.1-9B-A2B";
 const MIN_IDENTITY_CONFIDENCE = 0.55;
+const FORBIDDEN_KEYS = new Set([
+  "calorie", "calories", "kcal", "protein", "proteins", "proteina", "proteinas",
+  "carb", "carbs", "carbohydrate", "carbohydrates", "carbohidrato", "carbohidratos",
+  "fat", "fats", "grasa", "grasas", "lipid", "lipids", "macro", "macros",
+  "nutrient", "nutrients", "nutrition", "nutritional",
+  "instruction", "instructions", "prompt", "recommendation", "recommendations", "advice"
+]);
+const PORTION_ALIASES = new Map([
+  ["small", "small"], ["pequena", "small"], ["pequeno", "small"],
+  ["normal", "normal"], ["medium", "normal"], ["mediana", "normal"], ["mediano", "normal"],
+  ["large", "large"], ["grande", "large"]
+]);
 
 export const PHOTO_FOOD_PROMPT = `Identifica solamente los alimentos visibles de esta foto. Separa los componentes del plato.
 No calcules calorias, proteinas, carbohidratos, grasas ni otros nutrientes.
@@ -18,6 +30,106 @@ function bytesToBase64(bytes) {
 }
 
 function diagnostic(options, stage, details = {}) { options.onDiagnostic?.({ stage, ...details }); }
+
+function plainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizedKey(value) {
+  return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function containsForbiddenKey(value) {
+  if (Array.isArray(value)) return value.some(containsForbiddenKey);
+  if (!plainObject(value)) return false;
+  return Object.entries(value).some(([key, nested]) => FORBIDDEN_KEYS.has(normalizedKey(key)) || containsForbiddenKey(nested));
+}
+
+function compatibleAlias(source, primary, alias) {
+  const primaryValue = source[primary];
+  const aliasValue = source[alias];
+  if (primaryValue == null) return aliasValue;
+  if (aliasValue == null) return primaryValue;
+  const left = typeof primaryValue === "string" ? primaryValue.trim() : primaryValue;
+  const right = typeof aliasValue === "string" ? aliasValue.trim() : aliasValue;
+  if (left !== right) throw new Error("schema_validation_failed");
+  return primaryValue;
+}
+
+function optionalString(value) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") throw new Error("schema_validation_failed");
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function requiredName(value) {
+  if (typeof value !== "string" || !value.trim()) throw new Error("schema_validation_failed");
+  return value.trim();
+}
+
+function portion(value) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") throw new Error("schema_validation_failed");
+  const canonical = PORTION_ALIASES.get(normalizedKey(value));
+  if (!canonical) throw new Error("schema_validation_failed");
+  return canonical;
+}
+
+function grams(value) {
+  if (value == null || value === "") return null;
+  const match = typeof value === "string" ? value.trim().match(/^(\d{1,4})(?:\s*g(?:r(?:amos?)?)?)?$/i) : null;
+  const numeric = match ? Number(match[1]) : value;
+  if (!Number.isInteger(numeric) || numeric <= 0 || numeric > 3000) throw new Error("schema_validation_failed");
+  return numeric;
+}
+
+function confidence(value, nullable) {
+  if (value == null) {
+    if (nullable) return null;
+    throw new Error("schema_validation_failed");
+  }
+  const numeric = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) throw new Error("schema_validation_failed");
+  return numeric;
+}
+
+function notes(value) {
+  if (value == null) return [];
+  const list = typeof value === "string" ? [value] : value;
+  if (!Array.isArray(list) || list.some(note => typeof note !== "string")) throw new Error("schema_validation_failed");
+  return list.map(note => note.trim()).filter(Boolean);
+}
+
+function stringArray(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string")) throw new Error("schema_validation_failed");
+  return value.map(item => item.trim()).filter(Boolean);
+}
+
+export function canonicalizeCloudflareProposal(value) {
+  if (!plainObject(value) || containsForbiddenKey(value)) throw new Error("schema_validation_failed");
+  if (value.schemaVersion != null && Number(value.schemaVersion) !== 1) throw new Error("schema_validation_failed");
+  if (!Array.isArray(value.items) || value.items.length > 12) throw new Error("schema_validation_failed");
+  const items = value.items.map(item => {
+    if (!plainObject(item)) throw new Error("schema_validation_failed");
+    return {
+      name: requiredName(compatibleAlias(item, "name", "food")),
+      preparation: optionalString(item.preparation),
+      estimatedPortion: portion(compatibleAlias(item, "estimatedPortion", "portion")),
+      estimatedGrams: grams(compatibleAlias(item, "estimatedGrams", "grams")),
+      identityConfidence: confidence(compatibleAlias(item, "identityConfidence", "confidence"), false),
+      quantityConfidence: confidence(item.quantityConfidence, true),
+      notes: notes(item.notes)
+    };
+  });
+  return {
+    schemaVersion: 1,
+    items,
+    unknownComponents: stringArray(value.unknownComponents),
+    uncertainties: stringArray(value.uncertainties)
+  };
+}
 
 function parseJsonAnswer(answer, options) {
   if (answer && typeof answer === "object") return answer;
@@ -68,7 +180,13 @@ export async function analyzeFoodImage(image, options = {}) {
   }
   const usage = normalizeUsage(response?.metrics);
   diagnostic(options, "model_call_completed", { durationMs: Date.now() - started, ...usage });
-  const proposal = parseJsonAnswer(response?.answer ?? response?.response ?? response, options);
+  let proposal;
+  try { proposal = canonicalizeCloudflareProposal(parseJsonAnswer(response?.answer ?? response?.response ?? response, options)); }
+  catch (error) {
+    if (error.message !== "schema_validation_failed") throw error;
+    diagnostic(options, "schema_validation_failed", { errorCode: "schema_validation_failed" });
+    throw error;
+  }
   if (!validateProviderProposal(proposal)) {
     diagnostic(options, "schema_validation_failed", { errorCode: "schema_validation_failed" });
     throw new Error("schema_validation_failed");
