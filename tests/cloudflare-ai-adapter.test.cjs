@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
 
 (async () => {
-  const { analyzeFoodImage, canonicalizeCloudflareProposal, CLOUDFLARE_AI_MODEL, PHOTO_FOOD_PROMPT } = await import("../backend/src/cloudflare-ai-adapter.js");
+  const { analyzeFoodImage, canonicalizeCloudflareProposal, profileWorkersAiRootShape, CLOUDFLARE_AI_MODEL, PHOTO_FOOD_PROMPT } = await import("../backend/src/cloudflare-ai-adapter.js");
   const { runProvider } = await import("../backend/src/index.js");
   const { safeLog, safeStageLog } = await import("../backend/src/logging.js");
   const item = (name, confidence = .8) => ({ name, preparation: null, estimatedPortion: "normal", estimatedGrams: null, identityConfidence: confidence, quantityConfidence: .35, notes: ["Revisá la cantidad"] });
@@ -105,6 +105,30 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.equal(rootEvents.at(-2).selectedWrapper, "root"); assert.equal(rootEvents.at(-2).candidateType, "object");
   const directProposalEvents = await expectFailure(returnsWrapped(proposal([item("private-root-object")])), /unexpected_query_wrapper/, "query_response_rejected");
   assert.equal(directProposalEvents.at(-2).selectedWrapper, "root"); assert.equal(directProposalEvents.at(-2).candidateType, "object");
+  assert.deepEqual(profileWorkersAiRootShape({ answer: "private answer" }), {
+    rootKeyProfile: { answer: "string" },
+    rootShapeCodes: ["root_has_known_wrapper"]
+  }, "root answer perfilado sin valores");
+  const nestedResultEvents = await expectFailure(returnsWrapped({ result: { answer: wrapperPayload } }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.equal(nestedResultEvents.at(-2).selectedWrapper, "root");
+  assert.equal(nestedResultEvents.at(-2).candidateType, "object");
+  assert.deepEqual(nestedResultEvents.at(-2).rootKeyProfile, { result: "object" }, "result detectado por forma");
+  assert.deepEqual(nestedResultEvents.at(-2).resultShape, { answer: "string" }, "result.answer detectado solo por tipo");
+  assert.deepEqual(nestedResultEvents.at(-2).rootShapeCodes, ["nested_answer_detected", "root_has_known_wrapper"], "código estructural sin cambiar parser");
+  const nestedDataEvents = await expectFailure(returnsWrapped({ data: { answer: wrapperPayload } }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.deepEqual(nestedDataEvents.at(-2).dataShape, { answer: "string" }, "data.answer perfilado");
+  const nestedOutputEvents = await expectFailure(returnsWrapped({ output: { answer: wrapperPayload } }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.deepEqual(nestedOutputEvents.at(-2).outputShape, { answer: "string" }, "output.answer perfilado");
+  const unknownRootEvents = await expectFailure(returnsWrapped({ privateFoodName: "secret-food", privatePayload: { answer: wrapperPayload }, result: { secretNestedKey: { answer: "secret" }, output: { answer: "too deep" } } }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.deepEqual(unknownRootEvents.at(-2).rootKeyProfile, { result: "object" }, "solo claves root conocidas");
+  assert.equal(unknownRootEvents.at(-2).unknownRootKeysCount, 2, "claves desconocidas contadas");
+  assert.deepEqual(unknownRootEvents.at(-2).resultShape, { output: "object" }, "profundidad limitada a 2");
+  assert.equal(JSON.stringify(unknownRootEvents).includes("privateFoodName"), false, "nombre de clave desconocida no registrado");
+  assert.equal(JSON.stringify(unknownRootEvents).includes("secret-food"), false, "valor sensible no registrado");
+  assert.deepEqual(profileWorkersAiRootShape({ result: null, data: ["secret"], output: 3, errors: ["private error"] }), {
+    rootKeyProfile: { data: "array", errors: "array", output: "number", result: "null" },
+    rootShapeCodes: ["no_supported_text_field_detected", "root_has_known_wrapper"]
+  }, "arrays, null y numeros solo por tipo");
   await expectFailure(returns(wrapperPayload + "\n" + wrapperPayload), /json_extraction_failed/, "json_extraction_failed");
   await expectFailure(returns('{"items": ['), /json_parse_failed/, "json_parse_failed");
   await expectFailure(returns("[]"), /json_extraction_failed/, "json_extraction_failed");
@@ -159,6 +183,30 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.deepEqual(wrapperDiagnostic, { requestId: "random-id", stage: "model_call_completed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
     durationMs: 222, selectedWrapper: "answer", candidateType: "string" });
   assert.equal(/private|content|response/i.test(wrapperDiagnosticLogs[0]), false, "wrapper logueado sin contenido");
+  const shapeDiagnosticLogs = [];
+  const shapeDiagnostic = safeStageLog({
+    requestId: "random-id", stage: "model_call_completed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
+    selectedWrapper: "root", candidateType: "object",
+    rootKeyProfile: { result: "object", privateFoodKey: "string", answer: "secret-value" },
+    resultShape: { answer: "string", privateNestedKey: "object" },
+    dataShape: { output: "array" },
+    outputShape: { description: "null" },
+    unknownRootKeysCount: 2,
+    rootShapeCodes: ["nested_answer_detected", "not_allowed", "root_has_known_wrapper"],
+    result: { answer: "private-model-content" },
+    secretFoodName: "almendras"
+  }, { log: line => shapeDiagnosticLogs.push(line) });
+  assert.deepEqual(shapeDiagnostic, {
+    requestId: "random-id", stage: "model_call_completed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
+    selectedWrapper: "root", candidateType: "object",
+    rootKeyProfile: { result: "object" },
+    resultShape: { answer: "string" },
+    dataShape: { output: "array" },
+    outputShape: { description: "null" },
+    unknownRootKeysCount: 2,
+    rootShapeCodes: ["nested_answer_detected", "root_has_known_wrapper"]
+  });
+  assert.equal(/almendras|private|secret|model-content|privateFoodKey|privateNestedKey/i.test(shapeDiagnosticLogs[0]), false, "shape log sin valores ni claves desconocidas");
   const invalidWrapperDiagnostic = safeStageLog({ stage: "model_call_completed", selectedWrapper: "secret-wrapper", candidateType: "secret-type" }, { log: () => {} });
   assert.equal("selectedWrapper" in invalidWrapperDiagnostic, false); assert.equal("candidateType" in invalidWrapperDiagnostic, false);
   assert.equal("canonicalizationErrorCode" in safeStageLog({ stage: "schema_validation_failed", canonicalizationErrorCode: "not-allowed" }, { log: () => {} }), false, "código no cerrado descartado");

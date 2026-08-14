@@ -18,6 +18,12 @@ const UNSUPPORTED_ALIAS_KEYS = new Set([
   "foodname", "itemname", "portionsize", "servingsize", "estimatedweight",
   "weightgrams", "identityscore", "foodconfidence", "quantityscore"
 ]);
+const ROOT_KEY_ALLOWLIST = new Set([
+  "answer", "result", "response", "description", "caption", "data", "output",
+  "message", "messages", "success", "errors", "metrics", "usage", "request_id", "id"
+]);
+const NESTED_WRAPPER_KEYS = ["result", "data", "output"];
+const NESTED_TEXT_KEYS = ["answer", "response", "description", "caption", "result", "output"];
 
 class CanonicalizationError extends Error {
   constructor(code) {
@@ -157,6 +163,64 @@ function candidateType(value) {
   return "other";
 }
 
+function profileType(value) {
+  if (value == null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "object") return "object";
+  return "other";
+}
+
+export function profileWorkersAiRootShape(response) {
+  if (!plainObject(response)) return {};
+  const rootKeyProfile = {};
+  let unknownRootKeysCount = 0;
+  const rootShapeCodes = new Set();
+
+  for (const key of Object.keys(response).sort()) {
+    if (!ROOT_KEY_ALLOWLIST.has(key)) {
+      unknownRootKeysCount += 1;
+      continue;
+    }
+    rootKeyProfile[key] = profileType(response[key]);
+  }
+
+  const diagnostics = {};
+  if (Object.keys(rootKeyProfile).length) diagnostics.rootKeyProfile = rootKeyProfile;
+  if (unknownRootKeysCount) diagnostics.unknownRootKeysCount = unknownRootKeysCount;
+
+  const directTextField = ["answer", "response", "description", "caption"].some(key => typeof response[key] === "string");
+  if (Object.keys(rootKeyProfile).some(key => ["answer", "response", "description", "caption", "result", "data", "output"].includes(key))) {
+    rootShapeCodes.add("root_has_known_wrapper");
+  }
+  if (unknownRootKeysCount && !Object.keys(rootKeyProfile).length) rootShapeCodes.add("root_has_unknown_shape");
+
+  let nestedTextField = false;
+  for (const wrapper of NESTED_WRAPPER_KEYS) {
+    const value = response[wrapper];
+    if (!plainObject(value)) continue;
+    const nestedShape = {};
+    for (const key of NESTED_TEXT_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      nestedShape[key] = profileType(value[key]);
+      if (typeof value[key] === "string") {
+        nestedTextField = true;
+        if (key === "answer") rootShapeCodes.add("nested_answer_detected");
+        if (key === "response") rootShapeCodes.add("nested_response_detected");
+        if (key === "description") rootShapeCodes.add("nested_description_detected");
+        if (key === "caption") rootShapeCodes.add("nested_caption_detected");
+      }
+    }
+    if (Object.keys(nestedShape).length) diagnostics[`${wrapper}Shape`] = nestedShape;
+  }
+
+  if (!directTextField && !nestedTextField) rootShapeCodes.add("no_supported_text_field_detected");
+  if (rootShapeCodes.size) diagnostics.rootShapeCodes = [...rootShapeCodes].sort();
+  return diagnostics;
+}
+
 function selectQueryCandidate(response) {
   if (response == null) return { selectedWrapper: "none", candidateType: "null", candidate: null };
   if (!plainObject(response)) return { selectedWrapper: "root", candidateType: candidateType(response), candidate: response };
@@ -253,7 +317,13 @@ export async function analyzeFoodImage(image, options = {}) {
   }
   const usage = normalizeUsage(response?.metrics);
   const selection = selectQueryCandidate(response);
-  diagnostic(options, "model_call_completed", { durationMs: Date.now() - started, ...usage, selectedWrapper: selection.selectedWrapper, candidateType: selection.candidateType });
+  diagnostic(options, "model_call_completed", {
+    durationMs: Date.now() - started,
+    ...usage,
+    selectedWrapper: selection.selectedWrapper,
+    candidateType: selection.candidateType,
+    ...profileWorkersAiRootShape(response)
+  });
   if (selection.selectedWrapper === "none" || (selection.selectedWrapper === "answer" && selection.candidateType === "null")) queryResponseFailure("missing_query_answer", options);
   if (selection.selectedWrapper !== "answer") queryResponseFailure("unexpected_query_wrapper", options);
   if (selection.candidateType !== "string") queryResponseFailure("unexpected_candidate_type", options);
