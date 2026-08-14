@@ -150,20 +150,74 @@ export function canonicalizeCloudflareProposal(value) {
   };
 }
 
-function parseJsonAnswer(answer, options) {
-  if (answer && typeof answer === "object") return answer;
-  if (typeof answer !== "string" || !answer.trim()) {
-    diagnostic(options, "empty_response", { errorCode: "empty_response" });
-    throw new Error("empty_response");
+function candidateType(value) {
+  if (value == null) return "null";
+  if (typeof value === "string") return "string";
+  if (typeof value === "object" && !Array.isArray(value)) return "object";
+  return "other";
+}
+
+function selectQueryCandidate(response) {
+  if (response == null) return { selectedWrapper: "none", candidateType: "null", candidate: null };
+  if (!plainObject(response)) return { selectedWrapper: "root", candidateType: candidateType(response), candidate: response };
+  for (const selectedWrapper of ["answer", "response", "description"]) {
+    if (Object.prototype.hasOwnProperty.call(response, selectedWrapper)) {
+      const candidate = response[selectedWrapper];
+      return { selectedWrapper, candidateType: candidateType(candidate), candidate };
+    }
   }
-  const cleaned = answer.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
-  if (start < 0 || end < start) {
+  return { selectedWrapper: "root", candidateType: "object", candidate: response };
+}
+
+function queryResponseFailure(code, options) {
+  diagnostic(options, "query_response_rejected", { errorCode: code });
+  throw new Error(code);
+}
+
+function uniqueJsonObject(text, options) {
+  const objects = [];
+  let start = -1; let depth = 0; let quoted = false; let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (char === '"') { quoted = true; continue; }
+    if (char === "{") { if (depth === 0) start = index; depth += 1; continue; }
+    if (char === "}") {
+      if (depth === 0) {
+        diagnostic(options, "json_parse_failed", { errorCode: "json_parse_failed" });
+        throw new Error("json_parse_failed");
+      }
+      depth -= 1;
+      if (depth === 0) { objects.push(text.slice(start, index + 1)); start = -1; }
+    }
+  }
+  if (quoted || depth !== 0) {
+    diagnostic(options, "json_parse_failed", { errorCode: "json_parse_failed" });
+    throw new Error("json_parse_failed");
+  }
+  if (objects.length !== 1) {
     diagnostic(options, "json_extraction_failed", { errorCode: "json_extraction_failed" });
     throw new Error("json_extraction_failed");
   }
-  try { return JSON.parse(cleaned.slice(start, end + 1)); }
-  catch (_) {
+  return objects[0];
+}
+
+function parseJsonAnswer(answer, options) {
+  if (plainObject(answer) && Array.isArray(answer.items)) return answer;
+  if (answer && typeof answer === "object") queryResponseFailure("unexpected_candidate_type", options);
+  if (typeof answer !== "string" || !answer.trim()) queryResponseFailure("missing_query_answer", options);
+  const cleaned = answer.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const json = uniqueJsonObject(cleaned, options);
+  try {
+    const parsed = JSON.parse(json);
+    if (!plainObject(parsed)) throw new Error("json_parse_failed");
+    return parsed;
+  } catch (_) {
     diagnostic(options, "json_parse_failed", { errorCode: "json_parse_failed" });
     throw new Error("json_parse_failed");
   }
@@ -198,9 +252,13 @@ export async function analyzeFoodImage(image, options = {}) {
     throw safeError;
   }
   const usage = normalizeUsage(response?.metrics);
-  diagnostic(options, "model_call_completed", { durationMs: Date.now() - started, ...usage });
+  const selection = selectQueryCandidate(response);
+  diagnostic(options, "model_call_completed", { durationMs: Date.now() - started, ...usage, selectedWrapper: selection.selectedWrapper, candidateType: selection.candidateType });
+  if (selection.selectedWrapper === "none" || (selection.selectedWrapper === "answer" && selection.candidateType === "null")) queryResponseFailure("missing_query_answer", options);
+  if (selection.selectedWrapper !== "answer") queryResponseFailure("unexpected_query_wrapper", options);
+  if (selection.candidateType !== "string") queryResponseFailure("unexpected_candidate_type", options);
   let proposal;
-  try { proposal = canonicalizeCloudflareProposal(parseJsonAnswer(response?.answer ?? response?.response ?? response?.description ?? response, options)); }
+  try { proposal = canonicalizeCloudflareProposal(parseJsonAnswer(selection.candidate, options)); }
   catch (error) {
     if (error.message !== "schema_validation_failed") throw error;
     diagnostic(options, "schema_validation_failed", {

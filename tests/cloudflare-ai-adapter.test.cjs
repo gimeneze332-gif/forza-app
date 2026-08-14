@@ -22,6 +22,8 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.equal(result.proposal.items.some(value => "calories" in value || "protein" in value || "carbs" in value || "fat" in value), false);
   assert.equal(result.proposal.items[0].estimatedGrams, null);
   assert.deepEqual(validStages.map(event => event.stage), ["model_call_started", "model_call_completed"]);
+  assert.equal(validStages.at(-1).selectedWrapper, "answer");
+  assert.equal(validStages.at(-1).candidateType, "string");
 
   // CanonicalizaciÃ³n estructural conservadora: adapta forma, nunca contenido.
   const exact = proposal([item("pollo")]);
@@ -78,8 +80,11 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
     await assert.rejects(analyzeFoodImage(new Uint8Array([1]), { ai: aiImpl, onDiagnostic: event => events.push(event) }), error);
     assert.equal(events.at(-1).stage, stage);
     assert.equal(events.filter(event => event.stage === stage).length, 1);
+    return events;
   }
-  await expectFailure(returns(""), /empty_response/, "empty_response");
+  const missingAnswerEvents = await expectFailure(returns(""), /missing_query_answer/, "query_response_rejected");
+  assert.deepEqual(missingAnswerEvents.at(-2).selectedWrapper, "answer");
+  assert.deepEqual(missingAnswerEvents.at(-2).candidateType, "string");
   await expectFailure(returns("no-json"), /json_extraction_failed/, "json_extraction_failed");
   await expectFailure(returns("{invalid}"), /json_parse_failed/, "json_parse_failed");
   await expectFailure(returns(JSON.stringify({ items: [] })), /no_food/, "no_food");
@@ -88,12 +93,21 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   await expectFailure(returns(JSON.stringify({ ...proposal([item("pollo")]), calories: 200 })), /schema_validation_failed/, "schema_validation_failed");
   const wrapperPayload = JSON.stringify(proposal([item("wrapper-value")]));
   assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returnsWrapped({ answer: wrapperPayload }) })).proposal.items.length, 1, "JSON válido en answer");
-  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returnsWrapped({ response: wrapperPayload }) })).proposal.items.length, 1, "JSON válido en response");
-  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returnsWrapped({ description: wrapperPayload }) })).proposal.items.length, 1, "JSON válido en description");
-  await expectFailure(returnsWrapped({ description: "" }), /empty_response/, "empty_response");
-  await expectFailure(returnsWrapped({ description: "texto sin json" }), /json_extraction_failed/, "json_extraction_failed");
-  await expectFailure(returnsWrapped({ description: "{json-invalido}" }), /json_parse_failed/, "json_parse_failed");
-  await expectFailure(returnsWrapped({ metadata: "sin wrappers compatibles" }), /schema_validation_failed/, "schema_validation_failed");
+  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returns("```json\n" + wrapperPayload + "\n```") })).proposal.items.length, 1, "bloque JSON válido en answer");
+  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returns("Resultado:\n" + wrapperPayload + "\nFin") })).proposal.items.length, 1, "texto mínimo con un objeto inequívoco");
+  const objectAnswerEvents = await expectFailure(returnsWrapped({ answer: proposal([item("private-object")]) }), /unexpected_candidate_type/, "query_response_rejected");
+  assert.equal(objectAnswerEvents.at(-2).selectedWrapper, "answer"); assert.equal(objectAnswerEvents.at(-2).candidateType, "object");
+  const responseEvents = await expectFailure(returnsWrapped({ response: wrapperPayload }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.equal(responseEvents.at(-2).selectedWrapper, "response"); assert.equal(responseEvents.at(-2).candidateType, "string");
+  const descriptionEvents = await expectFailure(returnsWrapped({ description: wrapperPayload }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.equal(descriptionEvents.at(-2).selectedWrapper, "description"); assert.equal(descriptionEvents.at(-2).candidateType, "string");
+  const rootEvents = await expectFailure(returnsWrapped({ metadata: "sin wrappers compatibles" }), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.equal(rootEvents.at(-2).selectedWrapper, "root"); assert.equal(rootEvents.at(-2).candidateType, "object");
+  const directProposalEvents = await expectFailure(returnsWrapped(proposal([item("private-root-object")])), /unexpected_query_wrapper/, "query_response_rejected");
+  assert.equal(directProposalEvents.at(-2).selectedWrapper, "root"); assert.equal(directProposalEvents.at(-2).candidateType, "object");
+  await expectFailure(returns(wrapperPayload + "\n" + wrapperPayload), /json_extraction_failed/, "json_extraction_failed");
+  await expectFailure(returns('{"items": ['), /json_parse_failed/, "json_parse_failed");
+  await expectFailure(returns("[]"), /json_extraction_failed/, "json_extraction_failed");
   const granularEvents = [];
   await assert.rejects(analyzeFoodImage(new Uint8Array([1]), {
     ai: returns(JSON.stringify({ items: [{ name: "private-model-value", identityConfidence: .8, calories: 200 }] })),
@@ -138,6 +152,15 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.deepEqual(granularDiagnostic, { requestId: "random-id", stage: "schema_validation_failed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
     durationMs: 321, status: 502, errorCode: "schema_validation_failed", canonicalizationErrorCode: "confidence_missing" });
   assert.equal(/base64|private|calorias/i.test(granularDiagnosticLogs[0]), false, "log granular sin contenido sensible");
+  const wrapperDiagnosticLogs = [];
+  const wrapperDiagnostic = safeStageLog({ requestId: "random-id", stage: "model_call_completed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
+    durationMs: 222, selectedWrapper: "answer", candidateType: "string", candidate: "private-model-content", response: "private-response" },
+  { log: line => wrapperDiagnosticLogs.push(line) });
+  assert.deepEqual(wrapperDiagnostic, { requestId: "random-id", stage: "model_call_completed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
+    durationMs: 222, selectedWrapper: "answer", candidateType: "string" });
+  assert.equal(/private|content|response/i.test(wrapperDiagnosticLogs[0]), false, "wrapper logueado sin contenido");
+  const invalidWrapperDiagnostic = safeStageLog({ stage: "model_call_completed", selectedWrapper: "secret-wrapper", candidateType: "secret-type" }, { log: () => {} });
+  assert.equal("selectedWrapper" in invalidWrapperDiagnostic, false); assert.equal("candidateType" in invalidWrapperDiagnostic, false);
   assert.equal("canonicalizationErrorCode" in safeStageLog({ stage: "schema_validation_failed", canonicalizationErrorCode: "not-allowed" }, { log: () => {} }), false, "código no cerrado descartado");
   assert.equal(safeStageLog({ stage: "invented_stage", response: "secret" }, { log: () => { throw new Error("no debe registrar"); } }), null);
   console.log("FORZA Cloudflare AI adapter tests: OK");
