@@ -72,6 +72,7 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   expectCanonicalizationCode({ schemaVersion: 2, items: [] }, "noncanonicalizable_response");
 
   const returns = answer => ({ run: async () => ({ answer }) });
+  const returnsWrapped = value => ({ run: async () => value });
   async function expectFailure(aiImpl, error, stage) {
     const events = [];
     await assert.rejects(analyzeFoodImage(new Uint8Array([1]), { ai: aiImpl, onDiagnostic: event => events.push(event) }), error);
@@ -85,6 +86,14 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   await expectFailure(returns(JSON.stringify(proposal([]))), /no_food/, "no_food");
   await expectFailure(returns(JSON.stringify(proposal([item("posible comida", .3)]))), /low_confidence/, "low_confidence");
   await expectFailure(returns(JSON.stringify({ ...proposal([item("pollo")]), calories: 200 })), /schema_validation_failed/, "schema_validation_failed");
+  const wrapperPayload = JSON.stringify(proposal([item("wrapper-value")]));
+  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returnsWrapped({ answer: wrapperPayload }) })).proposal.items.length, 1, "JSON válido en answer");
+  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returnsWrapped({ response: wrapperPayload }) })).proposal.items.length, 1, "JSON válido en response");
+  assert.equal((await analyzeFoodImage(new Uint8Array([1]), { ai: returnsWrapped({ description: wrapperPayload }) })).proposal.items.length, 1, "JSON válido en description");
+  await expectFailure(returnsWrapped({ description: "" }), /empty_response/, "empty_response");
+  await expectFailure(returnsWrapped({ description: "texto sin json" }), /json_extraction_failed/, "json_extraction_failed");
+  await expectFailure(returnsWrapped({ description: "{json-invalido}" }), /json_parse_failed/, "json_parse_failed");
+  await expectFailure(returnsWrapped({ metadata: "sin wrappers compatibles" }), /schema_validation_failed/, "schema_validation_failed");
   const granularEvents = [];
   await assert.rejects(analyzeFoodImage(new Uint8Array([1]), {
     ai: returns(JSON.stringify({ items: [{ name: "private-model-value", identityConfidence: .8, calories: 200 }] })),

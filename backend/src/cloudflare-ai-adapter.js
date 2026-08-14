@@ -200,7 +200,7 @@ export async function analyzeFoodImage(image, options = {}) {
   const usage = normalizeUsage(response?.metrics);
   diagnostic(options, "model_call_completed", { durationMs: Date.now() - started, ...usage });
   let proposal;
-  try { proposal = canonicalizeCloudflareProposal(parseJsonAnswer(response?.answer ?? response?.response ?? response, options)); }
+  try { proposal = canonicalizeCloudflareProposal(parseJsonAnswer(response?.answer ?? response?.response ?? response?.description ?? response, options)); }
   catch (error) {
     if (error.message !== "schema_validation_failed") throw error;
     diagnostic(options, "schema_validation_failed", {
