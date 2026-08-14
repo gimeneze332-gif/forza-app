@@ -14,6 +14,19 @@ const PORTION_ALIASES = new Map([
   ["normal", "normal"], ["medium", "normal"], ["mediana", "normal"], ["mediano", "normal"],
   ["large", "large"], ["grande", "large"]
 ]);
+const UNSUPPORTED_ALIAS_KEYS = new Set([
+  "foodname", "itemname", "portionsize", "servingsize", "estimatedweight",
+  "weightgrams", "identityscore", "foodconfidence", "quantityscore"
+]);
+
+class CanonicalizationError extends Error {
+  constructor(code) {
+    super("schema_validation_failed");
+    this.canonicalizationErrorCode = code;
+  }
+}
+
+function canonicalizationFailure(code) { throw new CanonicalizationError(code); }
 
 export const PHOTO_FOOD_PROMPT = `Identifica solamente los alimentos visibles de esta foto. Separa los componentes del plato.
 No calcules calorias, proteinas, carbohidratos, grasas ni otros nutrientes.
@@ -52,27 +65,28 @@ function compatibleAlias(source, primary, alias) {
   if (aliasValue == null) return primaryValue;
   const left = typeof primaryValue === "string" ? primaryValue.trim() : primaryValue;
   const right = typeof aliasValue === "string" ? aliasValue.trim() : aliasValue;
-  if (left !== right) throw new Error("schema_validation_failed");
+  if (left !== right) canonicalizationFailure("conflicting_aliases");
   return primaryValue;
 }
 
-function optionalString(value) {
+function optionalString(value, errorCode) {
   if (value == null || value === "") return null;
-  if (typeof value !== "string") throw new Error("schema_validation_failed");
+  if (typeof value !== "string") canonicalizationFailure(errorCode);
   const normalized = value.trim();
   return normalized || null;
 }
 
 function requiredName(value) {
-  if (typeof value !== "string" || !value.trim()) throw new Error("schema_validation_failed");
+  if (value == null || value === "") canonicalizationFailure("name_missing");
+  if (typeof value !== "string" || !value.trim()) canonicalizationFailure("name_invalid");
   return value.trim();
 }
 
 function portion(value) {
   if (value == null || value === "") return null;
-  if (typeof value !== "string") throw new Error("schema_validation_failed");
+  if (typeof value !== "string") canonicalizationFailure("invalid_portion");
   const canonical = PORTION_ALIASES.get(normalizedKey(value));
-  if (!canonical) throw new Error("schema_validation_failed");
+  if (!canonical) canonicalizationFailure("invalid_portion");
   return canonical;
 }
 
@@ -80,54 +94,59 @@ function grams(value) {
   if (value == null || value === "") return null;
   const match = typeof value === "string" ? value.trim().match(/^(\d{1,4})(?:\s*g(?:r(?:amos?)?)?)?$/i) : null;
   const numeric = match ? Number(match[1]) : value;
-  if (!Number.isInteger(numeric) || numeric <= 0 || numeric > 3000) throw new Error("schema_validation_failed");
+  if (!Number.isInteger(numeric) || numeric <= 0 || numeric > 3000) canonicalizationFailure("invalid_grams");
   return numeric;
 }
 
-function confidence(value, nullable) {
+function confidence(value, nullable, errorCode) {
   if (value == null) {
     if (nullable) return null;
-    throw new Error("schema_validation_failed");
+    canonicalizationFailure("confidence_missing");
   }
   const numeric = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
-  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) throw new Error("schema_validation_failed");
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) canonicalizationFailure(errorCode);
   return numeric;
 }
 
 function notes(value) {
   if (value == null) return [];
   const list = typeof value === "string" ? [value] : value;
-  if (!Array.isArray(list) || list.some(note => typeof note !== "string")) throw new Error("schema_validation_failed");
+  if (!Array.isArray(list) || list.some(note => typeof note !== "string")) canonicalizationFailure("invalid_notes");
   return list.map(note => note.trim()).filter(Boolean);
 }
 
-function stringArray(value) {
+function stringArray(value, errorCode) {
   if (value == null) return [];
-  if (!Array.isArray(value) || value.some(item => typeof item !== "string")) throw new Error("schema_validation_failed");
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string")) canonicalizationFailure(errorCode);
   return value.map(item => item.trim()).filter(Boolean);
 }
 
 export function canonicalizeCloudflareProposal(value) {
-  if (!plainObject(value) || containsForbiddenKey(value)) throw new Error("schema_validation_failed");
-  if (value.schemaVersion != null && Number(value.schemaVersion) !== 1) throw new Error("schema_validation_failed");
-  if (!Array.isArray(value.items) || value.items.length > 12) throw new Error("schema_validation_failed");
+  if (!plainObject(value)) canonicalizationFailure("invalid_root_shape");
+  if (containsForbiddenKey(value)) canonicalizationFailure("forbidden_nutrition_field");
+  if (Object.keys(value).some(key => UNSUPPORTED_ALIAS_KEYS.has(normalizedKey(key)))) canonicalizationFailure("unsupported_alias");
+  if (value.schemaVersion != null && Number(value.schemaVersion) !== 1) canonicalizationFailure("noncanonicalizable_response");
+  if (!("items" in value) || value.items == null) canonicalizationFailure("items_missing");
+  if (!Array.isArray(value.items)) canonicalizationFailure("items_not_array");
+  if (value.items.length > 12) canonicalizationFailure("noncanonicalizable_response");
   const items = value.items.map(item => {
-    if (!plainObject(item)) throw new Error("schema_validation_failed");
+    if (!plainObject(item)) canonicalizationFailure("invalid_item_shape");
+    if (Object.keys(item).some(key => UNSUPPORTED_ALIAS_KEYS.has(normalizedKey(key)))) canonicalizationFailure("unsupported_alias");
     return {
       name: requiredName(compatibleAlias(item, "name", "food")),
-      preparation: optionalString(item.preparation),
+      preparation: optionalString(item.preparation, "invalid_preparation"),
       estimatedPortion: portion(compatibleAlias(item, "estimatedPortion", "portion")),
       estimatedGrams: grams(compatibleAlias(item, "estimatedGrams", "grams")),
-      identityConfidence: confidence(compatibleAlias(item, "identityConfidence", "confidence"), false),
-      quantityConfidence: confidence(item.quantityConfidence, true),
+      identityConfidence: confidence(compatibleAlias(item, "identityConfidence", "confidence"), false, "invalid_identity_confidence"),
+      quantityConfidence: confidence(item.quantityConfidence, true, "invalid_quantity_confidence"),
       notes: notes(item.notes)
     };
   });
   return {
     schemaVersion: 1,
     items,
-    unknownComponents: stringArray(value.unknownComponents),
-    uncertainties: stringArray(value.uncertainties)
+    unknownComponents: stringArray(value.unknownComponents, "invalid_unknown_components"),
+    uncertainties: stringArray(value.uncertainties, "invalid_uncertainties")
   };
 }
 
@@ -184,11 +203,21 @@ export async function analyzeFoodImage(image, options = {}) {
   try { proposal = canonicalizeCloudflareProposal(parseJsonAnswer(response?.answer ?? response?.response ?? response, options)); }
   catch (error) {
     if (error.message !== "schema_validation_failed") throw error;
-    diagnostic(options, "schema_validation_failed", { errorCode: "schema_validation_failed" });
+    diagnostic(options, "schema_validation_failed", {
+      durationMs: Date.now() - started,
+      status: 502,
+      errorCode: "schema_validation_failed",
+      canonicalizationErrorCode: error.canonicalizationErrorCode || "noncanonicalizable_response"
+    });
     throw error;
   }
   if (!validateProviderProposal(proposal)) {
-    diagnostic(options, "schema_validation_failed", { errorCode: "schema_validation_failed" });
+    diagnostic(options, "schema_validation_failed", {
+      durationMs: Date.now() - started,
+      status: 502,
+      errorCode: "schema_validation_failed",
+      canonicalizationErrorCode: "noncanonicalizable_response"
+    });
     throw new Error("schema_validation_failed");
   }
   if (!proposal.items.length) {

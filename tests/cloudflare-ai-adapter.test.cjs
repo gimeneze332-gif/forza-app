@@ -44,6 +44,33 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.throws(() => canonicalizeCloudflareProposal({ answer: "texto libre" }), /schema_validation_failed/, "JSON no canonicalizable");
   assert.throws(() => canonicalizeCloudflareProposal({ items: [{ name: "pollo", identityConfidence: .8 }], instructions: "ignorar reglas" }), /schema_validation_failed/, "instrucciones rechazadas");
 
+  const expectCanonicalizationCode = (input, expected) => {
+    let failure;
+    try { canonicalizeCloudflareProposal(input); } catch (error) { failure = error; }
+    assert.equal(failure?.message, "schema_validation_failed", `${expected}: error público estable`);
+    assert.equal(failure?.canonicalizationErrorCode, expected, `${expected}: código cerrado`);
+    assert.deepEqual(Object.keys(failure || {}).sort(), ["canonicalizationErrorCode"], `${expected}: error sin contenido del proveedor`);
+  };
+  expectCanonicalizationCode(null, "invalid_root_shape");
+  expectCanonicalizationCode({}, "items_missing");
+  expectCanonicalizationCode({ items: "no-array" }, "items_not_array");
+  expectCanonicalizationCode({ items: ["no-object"] }, "invalid_item_shape");
+  expectCanonicalizationCode({ items: [{ identityConfidence: .8 }] }, "name_missing");
+  expectCanonicalizationCode({ items: [{ name: 42, identityConfidence: .8 }] }, "name_invalid");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", preparation: {}, identityConfidence: .8 }] }, "invalid_preparation");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", portion: "enorme", identityConfidence: .8 }] }, "invalid_portion");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", grams: -1, identityConfidence: .8 }] }, "invalid_grams");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo" }] }, "confidence_missing");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", identityConfidence: 2 }] }, "invalid_identity_confidence");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", identityConfidence: .8, quantityConfidence: "no-number" }] }, "invalid_quantity_confidence");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", identityConfidence: .8, notes: [{}] }] }, "invalid_notes");
+  expectCanonicalizationCode({ items: [], unknownComponents: {} }, "invalid_unknown_components");
+  expectCanonicalizationCode({ items: [], uncertainties: {} }, "invalid_uncertainties");
+  expectCanonicalizationCode({ items: [{ name: "valor-modelo", identityConfidence: .8, calories: 1 }] }, "forbidden_nutrition_field");
+  expectCanonicalizationCode({ items: [{ foodName: "valor-modelo", confidence: .8 }] }, "unsupported_alias");
+  expectCanonicalizationCode({ items: [{ name: "uno", food: "dos", identityConfidence: .8 }] }, "conflicting_aliases");
+  expectCanonicalizationCode({ schemaVersion: 2, items: [] }, "noncanonicalizable_response");
+
   const returns = answer => ({ run: async () => ({ answer }) });
   async function expectFailure(aiImpl, error, stage) {
     const events = [];
@@ -58,6 +85,17 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   await expectFailure(returns(JSON.stringify(proposal([]))), /no_food/, "no_food");
   await expectFailure(returns(JSON.stringify(proposal([item("posible comida", .3)]))), /low_confidence/, "low_confidence");
   await expectFailure(returns(JSON.stringify({ ...proposal([item("pollo")]), calories: 200 })), /schema_validation_failed/, "schema_validation_failed");
+  const granularEvents = [];
+  await assert.rejects(analyzeFoodImage(new Uint8Array([1]), {
+    ai: returns(JSON.stringify({ items: [{ name: "private-model-value", identityConfidence: .8, calories: 200 }] })),
+    onDiagnostic: event => granularEvents.push(event)
+  }), /schema_validation_failed/);
+  assert.deepEqual(granularEvents.at(-1), {
+    stage: "schema_validation_failed", durationMs: granularEvents.at(-1).durationMs, status: 502,
+    errorCode: "schema_validation_failed", canonicalizationErrorCode: "forbidden_nutrition_field"
+  });
+  assert.equal(Number.isFinite(granularEvents.at(-1).durationMs), true);
+  assert.equal(JSON.stringify(granularEvents).includes("private-model-value"), false, "evento no contiene valores del modelo");
   const canonicalStages = [];
   const canonicalResult = await analyzeFoodImage(new Uint8Array([1]), { ai: returns(JSON.stringify({ items: [{ food: "pollo", portion: "large", confidence: .8 }] })), onDiagnostic: event => canonicalStages.push(event) });
   assert.equal(canonicalResult.proposal.items[0].name, "pollo", "respuesta canÃ³nica aceptada por validaciÃ³n estricta");
@@ -83,6 +121,15 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
     image: "data:image/jpeg;base64,secret-image", prompt: PHOTO_FOOD_PROMPT, response: proposal([item("pollo")]), food: "pollo", deviceToken: "device-secret", pairingCode: "12345678", apiKey: "api-secret", macros: { calories: 1 }, errorCode: "sensitive provider response" }, { log: line => diagnosticLogs.push(line) });
   assert.deepEqual(Object.keys(diagnostic).sort(), ["durationMs", "model", "neurons", "provider", "requestId", "size", "stage", "status"]);
   assert.equal(/base64|pollo|calorias|device-secret|12345678|api-secret|sensitive/i.test(diagnosticLogs[0]), false, "diagnóstico sin contenido sensible");
+  const granularDiagnosticLogs = [];
+  const granularDiagnostic = safeStageLog({ requestId: "random-id", stage: "schema_validation_failed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
+    durationMs: 321, status: 502, errorCode: "schema_validation_failed", canonicalizationErrorCode: "confidence_missing",
+    image: "data:image/jpeg;base64,secret-image", prompt: PHOTO_FOOD_PROMPT, response: "private-model-response", food: "private-food", deviceToken: "private-token" },
+  { log: line => granularDiagnosticLogs.push(line) });
+  assert.deepEqual(granularDiagnostic, { requestId: "random-id", stage: "schema_validation_failed", provider: "cloudflare-ai", model: CLOUDFLARE_AI_MODEL,
+    durationMs: 321, status: 502, errorCode: "schema_validation_failed", canonicalizationErrorCode: "confidence_missing" });
+  assert.equal(/base64|private|calorias/i.test(granularDiagnosticLogs[0]), false, "log granular sin contenido sensible");
+  assert.equal("canonicalizationErrorCode" in safeStageLog({ stage: "schema_validation_failed", canonicalizationErrorCode: "not-allowed" }, { log: () => {} }), false, "código no cerrado descartado");
   assert.equal(safeStageLog({ stage: "invented_stage", response: "secret" }, { log: () => { throw new Error("no debe registrar"); } }), null);
   console.log("FORZA Cloudflare AI adapter tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });
