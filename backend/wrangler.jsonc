@@ -7,8 +7,8 @@
   "ai": { "binding": "AI" },
   "vars": {
     "BACKEND_ENABLED": "true",
-    "PHOTO_ANALYSIS_ENABLED": "false",
-    "PHOTO_FOOD_PROVIDER": "mock",
+    "PHOTO_ANALYSIS_ENABLED": "true",
+    "PHOTO_FOOD_PROVIDER": "gemini",
     "ALLOWED_ORIGIN": "https://gimeneze332-gif.github.io"
   },
   "secrets": {

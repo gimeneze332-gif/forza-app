@@ -120,7 +120,9 @@ export function createHandler() {
       usage = analyzed.usage; model = analyzed.model;
       const result = normalizeVisualProposal(analyzed.proposal); componentCount = result.items.length;
       onDiagnostic({ stage: "normalization_completed", durationMs: Date.now() - started });
-      onDiagnostic({ stage: "analysis_completed", durationMs: Date.now() - started, status: 200, inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, totalTokens: usage?.totalTokens, neurons: usage?.neurons });
+      onDiagnostic({ stage: "analysis_completed", durationMs: Date.now() - started, status: 200,
+        inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens,
+        inputCostUsd: usage?.inputCostUsd, outputCostUsd: usage?.outputCostUsd, estimatedCostUsd: usage?.estimatedCostUsd, neurons: usage?.neurons });
       return json(result, 200, cors);
     } catch (error) {
       const providerRateLimit = error.message === "provider_rate_limit";
@@ -132,7 +134,8 @@ export function createHandler() {
       const finish = await stateRequest(env, "/analysis/finish", { method: "POST" });
       const quota = await finish.json().catch(() => ({}));
       safeLog({ requestId, timestamp: new Date().toISOString(), status, durationMs: Date.now() - started, size, componentCount, quotaRemaining: quota.dailyRemaining, error: genericError, provider, model,
-        inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens, neurons: usage?.neurons });
+        inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens,
+        inputCostUsd: usage?.inputCostUsd, outputCostUsd: usage?.outputCostUsd, estimatedCostUsd: usage?.estimatedCostUsd, neurons: usage?.neurons });
     }
   };
 }

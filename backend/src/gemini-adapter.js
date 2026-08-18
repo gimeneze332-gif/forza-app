@@ -1,5 +1,7 @@
 const MODEL = "gemini-3.5-flash-lite";
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
+const INPUT_COST_USD_PER_TOKEN = 0.30 / 1_000_000;
+const OUTPUT_COST_USD_PER_TOKEN = 2.50 / 1_000_000;
 const OFFICIAL_ERROR_STATUSES = new Set(["INVALID_ARGUMENT", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND", "RESOURCE_EXHAUSTED", "FAILED_PRECONDITION", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED"]);
 
 export const PHOTO_FOOD_PROMPT = `Actuás únicamente como observador visual de alimentos para FORZA Photo Food.
@@ -67,6 +69,19 @@ function safeProviderStatus(value) {
   return OFFICIAL_ERROR_STATUSES.has(value) ? value : null;
 }
 
+function roundCost(value) {
+  return Math.round(value * 1_000_000_000) / 1_000_000_000;
+}
+
+function estimateGeminiCost(usage = {}) {
+  const inputTokens = Number(usage.promptTokenCount || 0);
+  const outputTokens = Number(usage.candidatesTokenCount || 0);
+  const thinkingTokens = Number(usage.thoughtsTokenCount || 0);
+  const inputCostUsd = roundCost(inputTokens * INPUT_COST_USD_PER_TOKEN);
+  const outputCostUsd = roundCost((outputTokens + thinkingTokens) * OUTPUT_COST_USD_PER_TOKEN);
+  return { inputCostUsd, outputCostUsd, estimatedCostUsd: roundCost(inputCostUsd + outputCostUsd) };
+}
+
 async function readProviderErrorStatus(response) {
   try {
     const body = await response.clone().json();
@@ -79,15 +94,16 @@ async function readProviderErrorStatus(response) {
 export async function analyzeFoodImage(image, options = {}) {
   const started = Date.now();
   const onDiagnostic = typeof options.onDiagnostic === "function" ? options.onDiagnostic : () => {};
+  const diagnostic = details => onDiagnostic({ model: MODEL, ...details });
   const apiKey = String(options.apiKey || "");
   if (!apiKey) {
-    onDiagnostic({ stage: "gemini_auth_failed", errorCode: "gemini_disabled" });
+    diagnostic({ stage: "gemini_auth_failed", errorCode: "gemini_disabled" });
     throw new Error("gemini_disabled");
   }
   const bytes = image instanceof Uint8Array ? image : new Uint8Array(image || []);
   if (!bytes.length) throw new Error("invalid_image");
   const fetchImpl = options.fetchImpl || fetch;
-  onDiagnostic({ stage: "gemini_request_started" });
+  diagnostic({ stage: "gemini_request_started" });
   let response;
   try {
     response = await fetchImpl(`${API_ROOT}/${MODEL}:generateContent`, {
@@ -109,54 +125,57 @@ export async function analyzeFoodImage(image, options = {}) {
     });
   } catch (error) {
     if (error?.name === "AbortError") {
-      onDiagnostic({ stage: "gemini_timeout", errorCode: "provider_timeout", durationMs: Date.now() - started });
+      diagnostic({ stage: "gemini_timeout", errorCode: "provider_timeout", durationMs: Date.now() - started });
       throw new Error("provider_timeout");
     }
-    onDiagnostic({ stage: "gemini_provider_unavailable", errorCode: "provider_unavailable", durationMs: Date.now() - started });
+    diagnostic({ stage: "gemini_provider_unavailable", errorCode: "provider_unavailable", durationMs: Date.now() - started });
     throw new Error("provider_unavailable");
   }
-  onDiagnostic({ stage: "gemini_response_received", providerHttpStatus: response.status, durationMs: Date.now() - started });
+  diagnostic({ stage: "gemini_response_received", providerHttpStatus: response.status, durationMs: Date.now() - started });
   if (!response.ok) {
     const providerErrorStatus = await readProviderErrorStatus(response);
     const errorCode = providerError(response);
-    onDiagnostic({ stage: diagnosticStageFor(response, providerErrorStatus), providerHttpStatus: response.status, providerErrorStatus, errorCode, durationMs: Date.now() - started });
+    diagnostic({ stage: diagnosticStageFor(response, providerErrorStatus), providerHttpStatus: response.status, providerErrorStatus, errorCode, durationMs: Date.now() - started });
     throw new Error(errorCode);
   }
   let envelope;
   try {
     envelope = await response.json();
   } catch (_) {
-    onDiagnostic({ stage: "gemini_response_empty", providerHttpStatus: response.status, errorCode: "provider_empty_response", durationMs: Date.now() - started });
+    diagnostic({ stage: "gemini_response_empty", providerHttpStatus: response.status, errorCode: "provider_empty_response", durationMs: Date.now() - started });
     throw new Error("provider_empty_response");
   }
   const text = envelope?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
   if (!text) {
-    onDiagnostic({ stage: "gemini_response_empty", providerHttpStatus: response.status, errorCode: "provider_empty_response", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    diagnostic({ stage: "gemini_response_empty", providerHttpStatus: response.status, errorCode: "provider_empty_response", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
     throw new Error("provider_empty_response");
   }
   let proposal;
   try {
     proposal = JSON.parse(text);
   } catch (_) {
-    onDiagnostic({ stage: "gemini_json_parse_failed", providerHttpStatus: response.status, errorCode: "provider_invalid_json", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    diagnostic({ stage: "gemini_json_parse_failed", providerHttpStatus: response.status, errorCode: "provider_invalid_json", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
     throw new Error("provider_invalid_json");
   }
   const { validateProviderProposal } = await import("./schema.js");
   if (!validateProviderProposal(proposal)) {
-    onDiagnostic({ stage: "gemini_schema_failed", providerHttpStatus: response.status, errorCode: "provider_schema_invalid", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    diagnostic({ stage: "gemini_schema_failed", providerHttpStatus: response.status, errorCode: "provider_schema_invalid", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
     throw new Error("provider_schema_invalid");
   }
   const usage = envelope.usageMetadata || {};
-  onDiagnostic({ stage: "gemini_usage_received", providerHttpStatus: response.status, usageAvailable: Boolean(envelope.usageMetadata),
-    inputTokens: usage.promptTokenCount, outputTokens: usage.candidatesTokenCount, thinkingTokens: usage.thoughtsTokenCount, totalTokens: usage.totalTokenCount, durationMs: Date.now() - started });
-  onDiagnostic({ stage: "gemini_completed", providerHttpStatus: response.status, durationMs: Date.now() - started });
+  const cost = estimateGeminiCost(usage);
+  diagnostic({ stage: "gemini_usage_received", providerHttpStatus: response.status, usageAvailable: Boolean(envelope.usageMetadata),
+    inputTokens: usage.promptTokenCount, outputTokens: usage.candidatesTokenCount, thinkingTokens: usage.thoughtsTokenCount, totalTokens: usage.totalTokenCount,
+    inputCostUsd: cost.inputCostUsd, outputCostUsd: cost.outputCostUsd, estimatedCostUsd: cost.estimatedCostUsd, durationMs: Date.now() - started });
+  diagnostic({ stage: "gemini_completed", providerHttpStatus: response.status, durationMs: Date.now() - started });
   return {
     proposal,
     usage: {
       inputTokens: Number(usage.promptTokenCount || 0),
       outputTokens: Number(usage.candidatesTokenCount || 0),
       thinkingTokens: Number(usage.thoughtsTokenCount || 0),
-      totalTokens: Number(usage.totalTokenCount || 0)
+      totalTokens: Number(usage.totalTokenCount || 0),
+      ...cost
     },
     model: MODEL
   };

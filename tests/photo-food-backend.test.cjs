@@ -12,8 +12,8 @@ class MemoryStorage {
 (async () => {
   const deploymentConfig = fs.readFileSync("backend/wrangler.jsonc", "utf8");
   assert.match(deploymentConfig, /"BACKEND_ENABLED":\s*"true"/);
-  assert.match(deploymentConfig, /"PHOTO_ANALYSIS_ENABLED":\s*"false"/);
-  assert.match(deploymentConfig, /"PHOTO_FOOD_PROVIDER":\s*"mock"/);
+  assert.match(deploymentConfig, /"PHOTO_ANALYSIS_ENABLED":\s*"true"/);
+  assert.match(deploymentConfig, /"PHOTO_FOOD_PROVIDER":\s*"gemini"/);
   assert.match(deploymentConfig, /"observability":\s*\{[\s\S]*?"enabled":\s*true/);
   assert.match(deploymentConfig, /"invocation_logs":\s*false/);
   const { createHandler } = await import("../backend/src/index.js");
@@ -101,6 +101,12 @@ class MemoryStorage {
   assert.equal((await analyze(validToken)).status, 200, "el análisis diario 10 y mensual 300 todavía se aceptan");
   let state = await storage.get("state"); state.daily = 10; state.day = new Date().toISOString().slice(0, 10); state.perMinute = 0; state.busy = false; await storage.put("state", state);
   assert.equal((await analyze(validToken)).status, 429, "análisis 11 rechazado");
+  env.PHOTO_FOOD_PROVIDER = "gemini"; env.GEMINI_API_KEY = "gemini-secret-test";
+  let geminiCallsAfterLimit = 0;
+  global.fetch = async () => { geminiCallsAfterLimit += 1; return new Response("{}", { status: 200 }); };
+  assert.equal((await analyze(validToken)).status, 429, "límite diario se aplica antes de Gemini");
+  assert.equal(geminiCallsAfterLimit, 0, "Gemini no se llama si no hay cuota");
+  env.PHOTO_FOOD_PROVIDER = "mock"; delete env.GEMINI_API_KEY; global.fetch = originalFetch;
   state = await storage.get("state"); state.daily = 0; state.monthly = 300; state.month = new Date().toISOString().slice(0, 7); state.perMinute = 0; await storage.put("state", state);
   assert.equal((await analyze(validToken)).status, 429, "límite mensual 300");
   state = await storage.get("state"); state.monthly = 0; state.busy = true; await storage.put("state", state);
