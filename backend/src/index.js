@@ -3,7 +3,7 @@ import { validateImageHeaders, validateJpeg, MAX_IMAGE_BYTES } from "./image-val
 import { normalizeVisualProposal } from "./schema.js";
 import { safeLog, safeStageLog } from "./logging.js";
 import { analyzeMock } from "./mock-provider.js";
-import { analyzeFoodImage as analyzeWithGemini } from "./gemini-adapter.js";
+import { analyzeFoodImage as analyzeWithGemini, listAvailableGeminiModels } from "./gemini-adapter.js";
 import { analyzeFoodImage as analyzeWithCloudflareAI } from "./cloudflare-ai-adapter.js";
 export { PhotoFoodState } from "./photo-food-state.js";
 
@@ -13,7 +13,7 @@ function corsHeaders(request, env) {
   const origin = request.headers.get("origin") || "";
   return origin && origin === env.ALLOWED_ORIGIN ? {
     "access-control-allow-origin": origin,
-    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "Authorization, Content-Type, X-Photo-Food-Mock-Scenario",
     "access-control-max-age": "86400",
     "vary": "Origin"
@@ -61,6 +61,28 @@ export function createHandler() {
     if (url.pathname === "/health") {
       if (request.method !== "GET") return json({ error: "method_not_allowed", requestId }, 405, cors);
       return json({ status: "ok", analysisEnabled: env.PHOTO_ANALYSIS_ENABLED === "true", provider: env.PHOTO_FOOD_PROVIDER || "mock" }, 200, cors);
+    }
+    if (url.pathname === "/admin/gemini/models") {
+      if (request.method !== "GET") return json({ error: "method_not_allowed", requestId }, 405, cors);
+      if (!constantTimeEqual(bearerToken(request), env.PAIRING_ADMIN_SECRET)) {
+        safeLog({ requestId, timestamp: new Date().toISOString(), status: 403, durationMs: Date.now() - started, error: "forbidden", provider: "gemini" });
+        return json({ error: "forbidden", requestId }, 403, cors);
+      }
+      if (!env.GEMINI_API_KEY) {
+        safeLog({ requestId, timestamp: new Date().toISOString(), status: 503, durationMs: Date.now() - started, error: "gemini_disabled", provider: "gemini" });
+        return json({ error: "gemini_disabled", requestId }, 503, cors);
+      }
+      let status = 200; let genericError = null; let models = [];
+      try {
+        models = await listAvailableGeminiModels({ apiKey: env.GEMINI_API_KEY });
+        return json(models, 200, cors);
+      } catch (error) {
+        status = error.message === "provider_rate_limit" ? 429 : ["provider_auth_failed", "provider_request_failed", "provider_model_not_found", "provider_unavailable", "provider_invalid_json", "gemini_disabled"].includes(error.message) ? 502 : 503;
+        genericError = error.message === "provider_rate_limit" ? "provider_rate_limit" : "models_lookup_failed";
+        return json({ error: genericError, requestId }, status, cors);
+      } finally {
+        safeLog({ requestId, timestamp: new Date().toISOString(), status, durationMs: Date.now() - started, modelCount: models.length, error: genericError, provider: "gemini" });
+      }
     }
     if (request.method !== "POST") return json({ error: "method_not_allowed", requestId }, 405, cors);
     if (url.pathname === "/pairing/create") {

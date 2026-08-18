@@ -34,6 +34,43 @@ class MemoryStorage {
   assert.deepEqual(await response.json(), { status: "ok", analysisEnabled: false, provider: "mock" });
   assert.equal((await call("/photo-food/analyze", { headers: { authorization: "Bearer no-token", "content-type": "image/jpeg" }, body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]) })).status, 503, "análisis apagado responde 503");
 
+  const originalFetch = global.fetch;
+  try {
+    env.GEMINI_API_KEY = "gemini-secret-test";
+    global.fetch = async (url, options) => {
+      assert.match(String(url), /generativelanguage\.googleapis\.com\/v1beta\/models\?pageSize=1000/);
+      assert.equal(options.headers["x-goog-api-key"], "gemini-secret-test");
+      return new Response(JSON.stringify({ models: [
+        { name: "models/gemini-visible", displayName: "Gemini Visible", supportedGenerationMethods: ["generateContent"], description: "no devolver" },
+        { name: "models/gemini-hidden", displayName: "Gemini Hidden", supportedGenerationMethods: ["countTokens"] },
+        { name: "models/not-gemini", displayName: "Other", supportedGenerationMethods: ["generateContent"] }
+      ] }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const adminLogs = []; const originalConsoleLog = console.log;
+    try {
+      console.log = line => adminLogs.push(String(line));
+      response = await handle(new Request("https://worker.test/admin/gemini/models", { method: "GET", headers: { origin, authorization: "Bearer admin-test-only" } }), env);
+    } finally { console.log = originalConsoleLog; }
+    assert.equal(response.status, 200, "admin models auth válida");
+    assert.deepEqual(await response.json(), [{ name: "models/gemini-visible", displayName: "Gemini Visible", supportedGenerationMethods: ["generateContent"] }], "admin models devuelve solo campos permitidos filtrados");
+    assert.equal(/gemini-secret-test|description|no devolver/.test(adminLogs.join("\n")), false, "admin logs sin secreto ni raw response");
+    assert.match(adminLogs.join("\n"), /"modelCount":1/);
+    assert.equal((await handle(new Request("https://worker.test/admin/gemini/models", { method: "GET", headers: { origin, authorization: "Bearer bad" } }), env)).status, 403, "admin models auth inválida");
+    delete env.GEMINI_API_KEY;
+    assert.equal((await handle(new Request("https://worker.test/admin/gemini/models", { method: "GET", headers: { origin, authorization: "Bearer admin-test-only" } }), env)).status, 503, "admin models sin API key");
+    env.GEMINI_API_KEY = "gemini-secret-test";
+    global.fetch = async () => new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "no registrar" } }), { status: 400, headers: { "content-type": "application/json" } });
+    response = await handle(new Request("https://worker.test/admin/gemini/models", { method: "GET", headers: { origin, authorization: "Bearer admin-test-only" } }), env);
+    assert.equal(response.status, 502, "admin models error Google");
+    global.fetch = async () => new Response("not-json", { status: 200, headers: { "content-type": "application/json" } });
+    response = await handle(new Request("https://worker.test/admin/gemini/models", { method: "GET", headers: { origin, authorization: "Bearer admin-test-only" } }), env);
+    assert.equal(response.status, 502, "admin models respuesta inválida");
+    assert.equal((await handle(new Request("https://worker.test/admin/gemini/models", { method: "POST", headers: { origin, authorization: "Bearer admin-test-only" } }), env)).status, 405, "admin models solo GET");
+  } finally {
+    global.fetch = originalFetch;
+    delete env.GEMINI_API_KEY;
+  }
+
   response = await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } });
   assert.equal(response.status, 200, "pairing válido");
   const pairing = await response.json(); assert.match(pairing.code, /^\d{8}$/);

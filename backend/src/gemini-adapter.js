@@ -162,4 +162,31 @@ export async function analyzeFoodImage(image, options = {}) {
   };
 }
 
+export async function listAvailableGeminiModels(options = {}) {
+  const apiKey = String(options.apiKey || "");
+  if (!apiKey) throw new Error("gemini_disabled");
+  const fetchImpl = options.fetchImpl || fetch;
+  const response = await fetchImpl(`${API_ROOT}?pageSize=1000`, {
+    method: "GET",
+    headers: { "x-goog-api-key": apiKey },
+    signal: options.signal
+  });
+  if (!response.ok) throw new Error(providerError(response));
+  let envelope;
+  try {
+    envelope = await response.json();
+  } catch (_) {
+    throw new Error("provider_invalid_json");
+  }
+  if (!Array.isArray(envelope?.models)) throw new Error("provider_invalid_json");
+  return envelope.models
+    .filter(model => typeof model?.name === "string" && model.name.startsWith("models/gemini"))
+    .filter(model => Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes("generateContent"))
+    .map(model => ({
+      name: model.name,
+      displayName: typeof model.displayName === "string" ? model.displayName : "",
+      supportedGenerationMethods: model.supportedGenerationMethods.filter(method => typeof method === "string")
+    }));
+}
+
 export const analyzeWithGemini = analyzeFoodImage;

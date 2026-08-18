@@ -4,7 +4,7 @@ global.crypto = webcrypto;
 global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
 
 (async () => {
-  const { analyzeFoodImage, PHOTO_FOOD_PROMPT, PHOTO_FOOD_RESPONSE_SCHEMA } = await import("../backend/src/gemini-adapter.js");
+  const { analyzeFoodImage, listAvailableGeminiModels, PHOTO_FOOD_PROMPT, PHOTO_FOOD_RESPONSE_SCHEMA } = await import("../backend/src/gemini-adapter.js");
   const { validateProviderProposal, normalizeVisualProposal } = await import("../backend/src/schema.js");
   const { safeLog, safeStageLog } = await import("../backend/src/logging.js");
   const { runProvider } = await import("../backend/src/index.js");
@@ -57,6 +57,26 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   await rejectionCase(429, { error: { status: "RESOURCE_EXHAUSTED", message: "mensaje sensible" } }, "provider_rate_limit", "gemini_rate_limited", "RESOURCE_EXHAUSTED");
   await rejectionCase(500, { error: { status: "INTERNAL", message: "mensaje sensible" } }, "provider_unavailable", "gemini_provider_unavailable", "INTERNAL");
   await rejectionCase(503, { error: { status: "UNAVAILABLE", message: "mensaje sensible" } }, "provider_unavailable", "gemini_provider_unavailable", "UNAVAILABLE");
+  await assert.rejects(listAvailableGeminiModels({ apiKey: "x", fetchImpl: async () => response({}, 401) }), /provider_auth_failed/, "models.list auth");
+  await assert.rejects(listAvailableGeminiModels({ apiKey: "x", fetchImpl: async () => response("not-json") }), /provider_invalid_json/, "models.list JSON inválido");
+  await assert.rejects(listAvailableGeminiModels({ apiKey: "x", fetchImpl: async () => response({ models: null }) }), /provider_invalid_json/, "models.list forma inválida");
+  await assert.rejects(listAvailableGeminiModels({}), /gemini_disabled/, "models.list sin API key");
+  let modelsUrl;
+  const models = await listAvailableGeminiModels({ apiKey: "x", fetchImpl: async (url, options) => {
+    modelsUrl = { url, options };
+    return response({ models: [
+      { name: "models/gemini-a", displayName: "Gemini A", supportedGenerationMethods: ["generateContent", "countTokens"], description: "no devolver" },
+      { name: "models/gemini-b", displayName: "Gemini B", supportedGenerationMethods: ["countTokens"] },
+      { name: "models/other", displayName: "Other", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/gemini-c", supportedGenerationMethods: ["generateContent", 1] }
+    ] });
+  } });
+  assert.deepEqual(models, [
+    { name: "models/gemini-a", displayName: "Gemini A", supportedGenerationMethods: ["generateContent", "countTokens"] },
+    { name: "models/gemini-c", displayName: "", supportedGenerationMethods: ["generateContent"] }
+  ], "models.list filtra Gemini + generateContent y devuelve solo campos permitidos");
+  assert.match(modelsUrl.url, /\/models\?pageSize=1000$/);
+  assert.equal(modelsUrl.options.headers["x-goog-api-key"], "x");
 
   let invalidJsonEvents = [];
   await assert.rejects(analyzeFoodImage(new Uint8Array([1]), { apiKey: "x", onDiagnostic: item => invalidJsonEvents.push(item), fetchImpl: async () => response({ candidates: [{ content: { parts: [{ text: "not-json" }] } }] }) }), /provider_invalid_json/);
