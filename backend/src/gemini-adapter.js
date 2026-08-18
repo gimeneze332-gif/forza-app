@@ -1,4 +1,4 @@
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.5-flash-lite";
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
 const OFFICIAL_ERROR_STATUSES = new Set(["INVALID_ARGUMENT", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND", "RESOURCE_EXHAUSTED", "FAILED_PRECONDITION", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED"]);
 
