@@ -1,5 +1,6 @@
 const MODEL = "gemini-2.5-flash";
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
+const OFFICIAL_ERROR_STATUSES = new Set(["INVALID_ARGUMENT", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND", "RESOURCE_EXHAUSTED", "FAILED_PRECONDITION", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED"]);
 
 export const PHOTO_FOOD_PROMPT = `Actuás únicamente como observador visual de alimentos para FORZA Photo Food.
 Describí solo alimentos y preparaciones realmente visibles en la imagen.
@@ -49,38 +50,106 @@ function providerError(response) {
   if (response.status === 429) return "provider_rate_limit";
   if (response.status >= 500) return "provider_unavailable";
   if (response.status === 401 || response.status === 403) return "provider_auth_failed";
+  if (response.status === 404) return "provider_model_not_found";
   return "provider_request_failed";
 }
 
+function diagnosticStageFor(response, providerStatus = null) {
+  if (response.status === 429) return "gemini_rate_limited";
+  if (response.status === 404) return "gemini_model_not_found";
+  if (response.status === 401 || response.status === 403) return "gemini_auth_failed";
+  if (response.status === 400 && providerStatus === "FAILED_PRECONDITION") return "gemini_billing_failed";
+  if (response.status >= 500) return "gemini_provider_unavailable";
+  return "gemini_request_invalid";
+}
+
+function safeProviderStatus(value) {
+  return OFFICIAL_ERROR_STATUSES.has(value) ? value : null;
+}
+
+async function readProviderErrorStatus(response) {
+  try {
+    const body = await response.clone().json();
+    return safeProviderStatus(body?.error?.status || body?.status || null);
+  } catch (_) {
+    return null;
+  }
+}
+
 export async function analyzeFoodImage(image, options = {}) {
+  const started = Date.now();
+  const onDiagnostic = typeof options.onDiagnostic === "function" ? options.onDiagnostic : () => {};
   const apiKey = String(options.apiKey || "");
-  if (!apiKey) throw new Error("gemini_disabled");
+  if (!apiKey) {
+    onDiagnostic({ stage: "gemini_auth_failed", errorCode: "gemini_disabled" });
+    throw new Error("gemini_disabled");
+  }
   const bytes = image instanceof Uint8Array ? image : new Uint8Array(image || []);
   if (!bytes.length) throw new Error("invalid_image");
   const fetchImpl = options.fetchImpl || fetch;
-  const response = await fetchImpl(`${API_ROOT}/${MODEL}:generateContent`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    signal: options.signal,
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: PHOTO_FOOD_PROMPT }] },
-      contents: [{ role: "user", parts: [
-        { text: "Observá esta única imagen y devolvé exclusivamente el contrato JSON solicitado." },
-        { inlineData: { mimeType: "image/jpeg", data: bytesToBase64(bytes) } }
-      ] }],
-      generationConfig: {
-        temperature: 0.1, maxOutputTokens: 900,
-        responseMimeType: "application/json", responseJsonSchema: PHOTO_FOOD_RESPONSE_SCHEMA,
-        thinkingConfig: { thinkingBudget: 0 }
-      }
-    })
-  });
-  if (!response.ok) throw new Error(providerError(response));
-  const envelope = await response.json().catch(() => { throw new Error("provider_empty_response"); });
+  onDiagnostic({ stage: "gemini_request_started" });
+  let response;
+  try {
+    response = await fetchImpl(`${API_ROOT}/${MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      signal: options.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: PHOTO_FOOD_PROMPT }] },
+        contents: [{ role: "user", parts: [
+          { text: "Observá esta única imagen y devolvé exclusivamente el contrato JSON solicitado." },
+          { inlineData: { mimeType: "image/jpeg", data: bytesToBase64(bytes) } }
+        ] }],
+        generationConfig: {
+          temperature: 0.1, maxOutputTokens: 900,
+          responseMimeType: "application/json", responseJsonSchema: PHOTO_FOOD_RESPONSE_SCHEMA,
+          thinkingConfig: { thinkingBudget: 0 }
+        }
+      })
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      onDiagnostic({ stage: "gemini_timeout", errorCode: "provider_timeout", durationMs: Date.now() - started });
+      throw new Error("provider_timeout");
+    }
+    onDiagnostic({ stage: "gemini_provider_unavailable", errorCode: "provider_unavailable", durationMs: Date.now() - started });
+    throw new Error("provider_unavailable");
+  }
+  onDiagnostic({ stage: "gemini_response_received", providerHttpStatus: response.status, durationMs: Date.now() - started });
+  if (!response.ok) {
+    const providerErrorStatus = await readProviderErrorStatus(response);
+    const errorCode = providerError(response);
+    onDiagnostic({ stage: diagnosticStageFor(response, providerErrorStatus), providerHttpStatus: response.status, providerErrorStatus, errorCode, durationMs: Date.now() - started });
+    throw new Error(errorCode);
+  }
+  let envelope;
+  try {
+    envelope = await response.json();
+  } catch (_) {
+    onDiagnostic({ stage: "gemini_response_empty", providerHttpStatus: response.status, errorCode: "provider_empty_response", durationMs: Date.now() - started });
+    throw new Error("provider_empty_response");
+  }
   const text = envelope?.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
-  if (!text) throw new Error("provider_empty_response");
-  let proposal; try { proposal = JSON.parse(text); } catch (_) { throw new Error("provider_invalid_json"); }
+  if (!text) {
+    onDiagnostic({ stage: "gemini_response_empty", providerHttpStatus: response.status, errorCode: "provider_empty_response", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    throw new Error("provider_empty_response");
+  }
+  let proposal;
+  try {
+    proposal = JSON.parse(text);
+  } catch (_) {
+    onDiagnostic({ stage: "gemini_json_parse_failed", providerHttpStatus: response.status, errorCode: "provider_invalid_json", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    throw new Error("provider_invalid_json");
+  }
+  const { validateProviderProposal } = await import("./schema.js");
+  if (!validateProviderProposal(proposal)) {
+    onDiagnostic({ stage: "gemini_schema_failed", providerHttpStatus: response.status, errorCode: "provider_schema_invalid", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    throw new Error("provider_schema_invalid");
+  }
   const usage = envelope.usageMetadata || {};
+  onDiagnostic({ stage: "gemini_usage_received", providerHttpStatus: response.status, usageAvailable: Boolean(envelope.usageMetadata),
+    inputTokens: usage.promptTokenCount, outputTokens: usage.candidatesTokenCount, thinkingTokens: usage.thoughtsTokenCount, totalTokens: usage.totalTokenCount, durationMs: Date.now() - started });
+  onDiagnostic({ stage: "gemini_completed", providerHttpStatus: response.status, durationMs: Date.now() - started });
   return {
     proposal,
     usage: {
