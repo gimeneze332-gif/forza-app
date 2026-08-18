@@ -67,6 +67,30 @@
         return Math.round((Number(value) + Number.EPSILON) * 10) / 10;
     }
 
+    function parseNutritionNumber(value, { optional = false } = {}) {
+        if (typeof value === "number") {
+            return Number.isFinite(value) && value >= 0 ? value : null;
+        }
+        const text = String(value ?? "").trim();
+        if (!text) return optional ? null : null;
+        if (!/^\d+(?:[.,]\d+)?$/.test(text)) return null;
+        const normalized = Number(text.replace(",", "."));
+        return Number.isFinite(normalized) && normalized >= 0 ? normalized : null;
+    }
+
+    function normalizeMealNutrition(meal) {
+        const calories = parseNutritionNumber(meal.calories);
+        const protein = parseNutritionNumber(meal.protein);
+        const carbs = parseNutritionNumber(meal.carbs, { optional: true });
+        const fat = parseNutritionNumber(meal.fat, { optional: true });
+        const hasCarbs = String(meal.carbs ?? "").trim() !== "";
+        const hasFat = String(meal.fat ?? "").trim() !== "";
+        if (calories == null || protein == null || carbs == null && hasCarbs || fat == null && hasFat) {
+            throw new Error("invalid_nutrition_number");
+        }
+        return { calories, protein, carbs, fat };
+    }
+
     function quantityFor(segment, food) {
         const match = segment.match(/\b(\d+(?:[.,]\d+)?)\b/);
         const amount = match ? Number(match[1].replace(",", ".")) : null;
@@ -144,13 +168,12 @@
     }
 
     function saveMeal(meal) {
+        const nutrition = normalizeMealNutrition(meal);
         const saved = {
             id: id("meal"), date: dateKey(), createdAt: new Date().toISOString(),
             rawText: String(meal.rawText || "").trim(),
             items: Array.isArray(meal.items) ? meal.items : [],
-            calories: Number(meal.calories || 0), protein: Number(meal.protein || 0),
-            carbs: meal.carbs === "" || meal.carbs == null ? null : Number(meal.carbs),
-            fat: meal.fat === "" || meal.fat == null ? null : Number(meal.fat),
+            ...nutrition,
             source: meal.source === "frequent" ? "frequent" : "text",
             isFavorite: Boolean(meal.isFavorite)
         };
@@ -452,14 +475,23 @@
     function saveReviewed(event) {
         event.preventDefault();
         if (!draft) return;
-        const saved = saveMeal({
-            rawText: draft.rawText, items: draft.items,
-            calories: el.reviewCalories.value, protein: el.reviewProtein.value,
-            carbs: el.reviewCarbs.value, fat: el.reviewFat.value,
-            source: "text", isFavorite: el.reviewFavorite.checked,
-            recognition: draft.recognition || (draft.smartText ? "smart-text-v1" : undefined),
-            contextType: draft.contextType, confidence: draft.confidence
-        });
+        let saved;
+        try {
+            saved = saveMeal({
+                rawText: draft.rawText, items: draft.items,
+                calories: el.reviewCalories.value, protein: el.reviewProtein.value,
+                carbs: el.reviewCarbs.value, fat: el.reviewFat.value,
+                source: "text", isFavorite: el.reviewFavorite.checked,
+                recognition: draft.recognition || (draft.smartText ? "smart-text-v1" : undefined),
+                contextType: draft.contextType, confidence: draft.confidence
+            });
+        } catch (error) {
+            if (error?.message === "invalid_nutrition_number") {
+                el.feedback.textContent = "Ingresá un número válido.";
+                return;
+            }
+            throw error;
+        }
         const mealName = el.reviewMealName.value.trim();
         const api = smartTextApi();
         if (mealName && api && draft.items.length) {
@@ -532,7 +564,7 @@
         renderCard();
     }
 
-    const api = Object.freeze({ STORAGE, parseMealText, calculateDailyTotals, getDailyStatus, getFrequentMeals, normalizeText });
+    const api = Object.freeze({ STORAGE, parseMealText, parseNutritionNumber, normalizeMealNutrition, calculateDailyTotals, getDailyStatus, getFrequentMeals, normalizeText });
     if (typeof window !== "undefined") window.ForzaNutrition = api;
     if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded", () => {
         try { init(); }

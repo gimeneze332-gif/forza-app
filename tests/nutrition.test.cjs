@@ -63,6 +63,46 @@ assert.equal(typeof parsed.totals.carbs, "number");
 assert.equal(typeof parsed.totals.fat, "number");
 assert.equal(context.window.ForzaSmartText, undefined, "Nutrition conserva el fallback sin motor Smart Text");
 
+assert.equal(api.parseNutritionNumber("106.8"), 106.8);
+assert.equal(api.parseNutritionNumber("1.3"), 1.3);
+assert.equal(api.parseNutritionNumber("106,8"), 106.8);
+assert.equal(api.parseNutritionNumber("1,3"), 1.3);
+assert.equal(api.parseNutritionNumber("28.4"), 28.4, "carbohidratos decimales");
+assert.equal(api.parseNutritionNumber("0.4"), 0.4, "grasas decimales");
+assert.equal(api.parseNutritionNumber("106"), 106, "enteros");
+assert.equal(api.parseNutritionNumber("0"), 0, "cero válido");
+assert.equal(api.parseNutritionNumber("", { optional: true }), null, "opcional vacío");
+assert.equal(api.parseNutritionNumber(""), null, "vacío rechazado");
+assert.equal(api.parseNutritionNumber("banana"), null, "texto rechazado");
+assert.equal(api.parseNutritionNumber(NaN), null, "NaN rechazado");
+assert.equal(api.parseNutritionNumber(Infinity), null, "Infinity rechazado");
+assert.equal(api.parseNutritionNumber("106,8.2"), null, "formato ambiguo rechazado");
+assert.equal(api.parseNutritionNumber("1.3.2"), null, "múltiples puntos rechazados");
+assert.deepEqual(
+    JSON.parse(JSON.stringify(api.normalizeMealNutrition({ calories: "106.8", protein: "1.3", carbs: "28.4", fat: "0.4" }))),
+    { calories: 106.8, protein: 1.3, carbs: 28.4, fat: 0.4 }
+);
+assert.deepEqual(
+    JSON.parse(JSON.stringify(api.normalizeMealNutrition({ calories: "106,8", protein: "1,3", carbs: "28,4", fat: "0,4" }))),
+    { calories: 106.8, protein: 1.3, carbs: 28.4, fat: 0.4 }
+);
+assert.deepEqual(
+    JSON.parse(JSON.stringify(api.normalizeMealNutrition({
+        rawText: "120 g de banana",
+        items: [{ name: "banana", grams: 120 }],
+        calories: "106.8",
+        protein: "1.3",
+        carbs: "27.4",
+        fat: "0.4"
+    }))),
+    { calories: 106.8, protein: 1.3, carbs: 27.4, fat: 0.4 },
+    "Photo Food banana 120 g con decimales puede guardarse"
+);
+assert.throws(() => api.normalizeMealNutrition({ calories: "", protein: "1.3", carbs: "", fat: "" }), /invalid_nutrition_number/);
+assert.throws(() => api.normalizeMealNutrition({ calories: "106.8", protein: "texto", carbs: "", fat: "" }), /invalid_nutrition_number/);
+assert.throws(() => api.normalizeMealNutrition({ calories: "106.8", protein: "1.3", carbs: "NaN", fat: "" }), /invalid_nutrition_number/);
+assert.throws(() => api.normalizeMealNutrition({ calories: "106.8", protein: "1.3", carbs: "", fat: "Infinity" }), /invalid_nutrition_number/);
+
 const uncertain = api.parseMealText("pizza casera especial");
 assert.equal(uncertain.rawText, "pizza casera especial");
 assert.deepEqual(Array.from(uncertain.unrecognized), ["pizza casera especial"]);
@@ -130,6 +170,10 @@ assert.ok(source.includes("Comida registrada"));
 assert.ok(html.includes('id="nutrition-review-meal-name"'));
 assert.ok(html.includes('data-nutrition-view="photo"'));
 assert.ok(html.includes('class="nutrition-secondary-options"'));
+assert.match(html, /id="nutrition-review-calories"[^>]+type="text"[^>]+inputmode="decimal"/);
+assert.match(html, /id="nutrition-review-protein"[^>]+type="text"[^>]+inputmode="decimal"/);
+assert.match(html, /id="nutrition-review-carbs"[^>]+type="text"[^>]+inputmode="decimal"/);
+assert.match(html, /id="nutrition-review-fat"[^>]+type="text"[^>]+inputmode="decimal"/);
 assert.equal(html.includes("Registro rápido"), false);
 assert.equal(source.includes("Catálogo local:"), false);
 assert.ok(source.includes("No pude reconocer esto"));
