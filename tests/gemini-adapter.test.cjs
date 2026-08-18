@@ -25,9 +25,15 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.match(captured.url, /gemini-3\.5-flash-lite:generateContent$/);
   assert.equal(captured.options.headers["x-goog-api-key"], "test-key");
   const sent = JSON.parse(captured.options.body);
-  assert.equal(sent.generationConfig.thinkingConfig.thinkingBudget, 0);
+  assert.equal(Object.hasOwn(sent.generationConfig, "temperature"), false);
+  assert.equal(Object.hasOwn(sent.generationConfig.thinkingConfig, "thinkingBudget"), false);
+  assert.equal(sent.generationConfig.thinkingConfig.thinkingLevel, "minimal");
+  assert.equal(sent.generationConfig.maxOutputTokens, 900);
   assert.equal(sent.generationConfig.responseMimeType, "application/json");
   assert.deepEqual(sent.generationConfig.responseJsonSchema, PHOTO_FOOD_RESPONSE_SCHEMA);
+  assert.equal(sent.contents[0].parts[1].inlineData.mimeType, "image/jpeg");
+  assert.equal(typeof sent.contents[0].parts[1].inlineData.data, "string");
+  assert.ok(sent.contents[0].parts[1].inlineData.data.length > 0);
   assert.equal(/calorías|proteína|carbohidratos|grasas/.test(PHOTO_FOOD_PROMPT), true);
   assert.equal(/nombre del usuario|email|entrenamiento del usuario/i.test(captured.options.body), false);
 

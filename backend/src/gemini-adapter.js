@@ -101,9 +101,9 @@ export async function analyzeFoodImage(image, options = {}) {
           { inlineData: { mimeType: "image/jpeg", data: bytesToBase64(bytes) } }
         ] }],
         generationConfig: {
-          temperature: 0.1, maxOutputTokens: 900,
+          maxOutputTokens: 900,
           responseMimeType: "application/json", responseJsonSchema: PHOTO_FOOD_RESPONSE_SCHEMA,
-          thinkingConfig: { thinkingBudget: 0 }
+          thinkingConfig: { thinkingLevel: "minimal" }
         }
       })
     });
