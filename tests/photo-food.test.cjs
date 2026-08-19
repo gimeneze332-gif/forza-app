@@ -77,6 +77,15 @@ assert.equal(typeof api.processImage, "function");
     "Photo Food usa el cálculo nutricional local"
   );
 
+  const cookingChickenText = api.proposalToText({ items: [{
+    name: "pollo", preparation: null, estimatedPortion: null, estimatedGrams: null,
+    foodConfidence: .8, quantityConfidence: .3, notes: ["Revisá la cantidad"]
+  }], uncertainties: [] });
+  assert.equal(cookingChickenText, "pollo", "Photo Food conserva el alimento aunque la cantidad sea incierta");
+  const chickenFromPhoto = smartContext.ForzaSmartText.interpret(cookingChickenText);
+  assert.equal(chickenFromPhoto.items[0].catalogId, "chicken", "Photo Food con pollo en cocción llega a Smart Text");
+  assert.equal(chickenFromPhoto.items[0].grams, 150, "Smart Text aplica su porción local revisable cuando la foto no estima gramos");
+
   const html = fs.readFileSync("index.html", "utf8");
   const configSource = fs.readFileSync("photo-food-config.js", "utf8");
   assert.match(html, /capture="environment"/);

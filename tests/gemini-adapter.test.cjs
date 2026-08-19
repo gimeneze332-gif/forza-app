@@ -39,6 +39,9 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.equal(typeof sent.contents[0].parts[1].inlineData.data, "string");
   assert.ok(sent.contents[0].parts[1].inlineData.data.length > 0);
   assert.equal(/calorías|proteína|carbohidratos|grasas/.test(PHOTO_FOOD_PROMPT), true);
+  assert.match(PHOTO_FOOD_PROMPT, /sartén, olla, horno, air fryer/);
+  assert.match(PHOTO_FOOD_PROMPT, /No inventes gramos ni preparación/);
+  assert.match(PHOTO_FOOD_PROMPT, /No descartes un alimento reconocible solo por estar cocinándose/);
   assert.equal(/nombre del usuario|email|entrenamiento del usuario/i.test(captured.options.body), false);
 
   assert.equal(validateProviderProposal(valid), true);
@@ -49,6 +52,26 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.equal(validateProviderProposal({ ...valid, items: [{ ...valid.items[0], identityConfidence: .2 }] }), true, "baja confianza");
   assert.equal(validateProviderProposal({ schemaVersion: 1, items: [], unknownComponents: [], uncertainties: [] }), true, "foto sin comida");
   assert.throws(() => normalizeVisualProposal({ ...valid, unexpected: true }), /invalid_provider_response/, "schema inválido");
+
+  const cookingCases = [
+    { ...valid.items[0], name: "pollo", preparation: "en sartén", estimatedGrams: null },
+    { ...valid.items[0], name: "pollo", preparation: null },
+    { ...valid.items[0], name: "pollo", quantityConfidence: .15 },
+    { ...valid.items[0], name: "pollo", estimatedPortion: null }
+  ];
+  for (const item of cookingCases) {
+    const cookingProposal = { ...valid, items: [item] };
+    const accepted = await analyzeFoodImage(new Uint8Array([1]), { apiKey: "x", fetchImpl: async () => response(envelope(cookingProposal)) });
+    assert.deepEqual(accepted.proposal, cookingProposal, "alimento reconocible en cocción acepta incertidumbre de cantidad o preparación");
+  }
+  const banana = { ...valid, items: [{ ...valid.items[0], name: "banana", preparation: null, estimatedPortion: "normal", estimatedGrams: 120, identityConfidence: .96, quantityConfidence: .8 }] };
+  assert.deepEqual((await analyzeFoodImage(new Uint8Array([1]), { apiKey: "x", fetchImpl: async () => response(envelope(banana)) })).proposal, banana, "banana sin regresión");
+  const lowIdentityEvents = [];
+  await assert.rejects(analyzeFoodImage(new Uint8Array([1]), { apiKey: "x", onDiagnostic: item => lowIdentityEvents.push(item), fetchImpl: async () => response(envelope({ ...valid, items: [{ ...valid.items[0], identityConfidence: .54 }] })) }), /low_confidence/);
+  assert.equal(lowIdentityEvents.at(-1).stage, "low_confidence");
+  const noFoodEvents = [];
+  await assert.rejects(analyzeFoodImage(new Uint8Array([1]), { apiKey: "x", onDiagnostic: item => noFoodEvents.push(item), fetchImpl: async () => response(envelope({ ...valid, items: [] })) }), /no_food/);
+  assert.equal(noFoodEvents.at(-1).stage, "no_food");
 
   async function rejectionCase(status, body, expectedError, expectedStage, expectedProviderStatus = null) {
     const events = [];

@@ -2,6 +2,7 @@ const MODEL = "gemini-3.5-flash-lite";
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
 const INPUT_COST_USD_PER_TOKEN = 0.30 / 1_000_000;
 const OUTPUT_COST_USD_PER_TOKEN = 2.50 / 1_000_000;
+const MIN_IDENTITY_CONFIDENCE = 0.55;
 const OFFICIAL_ERROR_STATUSES = new Set(["INVALID_ARGUMENT", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND", "RESOURCE_EXHAUSTED", "FAILED_PRECONDITION", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED"]);
 
 export const PHOTO_FOOD_PROMPT = `Actuás únicamente como observador visual de alimentos para FORZA Photo Food.
@@ -13,6 +14,10 @@ Identificá cada componente visible por separado cuando sea posible. Para platos
 Para milanesas, distinguí carne o pollo y frita, horno o air fryer solo si existe evidencia visual suficiente; de lo contrario usá null y explicá la incertidumbre.
 Para hamburguesas, distinguí medallón o hamburguesa completa cuando sea visible y separá acompañamientos.
 Para bebidas, identificá el tipo solo si es visible. La cantidad debe tener baja confianza salvo referencia clara.
+Las imágenes pueden mostrar alimentos en sartén, olla, horno, air fryer, durante la cocción, parcialmente preparados o sin emplatar.
+Si la identidad del alimento es reconocible, incluí el alimento aunque no puedas determinar con seguridad la preparación, la porción o los gramos.
+En esos casos usá preparation null, estimatedPortion null y estimatedGrams null; quantityConfidence puede ser baja y notes debe incluir "Revisá la cantidad".
+No inventes gramos ni preparación. No descartes un alimento reconocible solo por estar cocinándose.
 Si no hay referencia suficiente para gramos, usá null y priorizá small, normal o large.
 Si algo no puede identificarse, agregalo a unknownComponents. Si no hay comida, devolvé items y unknownComponents vacíos.
 Priorizá precisión sobre completar la respuesta. Ante cualquier duda usá null, confianza baja o uncertainties.`;
@@ -161,6 +166,14 @@ export async function analyzeFoodImage(image, options = {}) {
   if (!validateProviderProposal(proposal)) {
     diagnostic({ stage: "gemini_schema_failed", providerHttpStatus: response.status, errorCode: "provider_schema_invalid", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
     throw new Error("provider_schema_invalid");
+  }
+  if (!proposal.items.length) {
+    diagnostic({ stage: "no_food", providerHttpStatus: response.status, errorCode: "no_food", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    throw new Error("no_food");
+  }
+  if (proposal.items.every(item => Number(item.identityConfidence) < MIN_IDENTITY_CONFIDENCE)) {
+    diagnostic({ stage: "low_confidence", providerHttpStatus: response.status, errorCode: "low_confidence", usageAvailable: Boolean(envelope?.usageMetadata), durationMs: Date.now() - started });
+    throw new Error("low_confidence");
   }
   const usage = envelope.usageMetadata || {};
   const cost = estimateGeminiCost(usage);
