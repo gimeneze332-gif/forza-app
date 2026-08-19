@@ -57,6 +57,41 @@ assert.equal(toast.items[0].grams, 60);
 
 const halfBanana = api.interpret("media banana");
 assert.equal(halfBanana.items[0].quantity, 0.5);
+
+const almondCases = [
+    ["almendra", 1, 1.2, true],
+    ["almendras", 1, 1.2, true],
+    ["1 almendra", 1, 1.2, false],
+    ["10 almendras", 10, 12, false],
+    ["15 almendras", 15, 18, false],
+    ["30 g almendras", 30, 30, false],
+    ["30 g de almendras", 30, 30, false],
+    ["30 gramos de almendras", 30, 30, false]
+];
+almondCases.forEach(([text, quantity, grams, estimated]) => {
+    const result = api.interpret(text);
+    assert.equal(result.items.length, 1, `${text}: alimento reconocido`);
+    assert.equal(result.unrecognized.length, 0, `${text}: sin componente desconocido`);
+    assert.equal(result.items[0].catalogId, "almond", `${text}: singular/plural almond`);
+    assert.equal(result.items[0].quantity, quantity, `${text}: cantidad`);
+    assert.equal(result.items[0].grams, grams, `${text}: gramos`);
+    assert.equal(result.items[0].estimated, estimated, `${text}: estimación correcta`);
+});
+
+const fifteenAlmonds = api.interpret("15 almendras");
+assert.equal(fifteenAlmonds.items[0].unit, "unit");
+assert.equal(fifteenAlmonds.items[0].explicitQuantity, true);
+assert.deepEqual(
+    JSON.parse(JSON.stringify(fifteenAlmonds.totals)),
+    { calories: 104.2, protein: 3.8, carbs: 3.9, fat: 9 },
+    "15 almendras calculan nutrientes proporcionales para 18 g"
+);
+const fifteenGramsAlmonds = api.interpret("15 g de almendras");
+assert.equal(fifteenGramsAlmonds.items[0].unit, "g");
+assert.equal(fifteenGramsAlmonds.items[0].grams, 15);
+assert.notEqual(fifteenAlmonds.items[0].grams, fifteenGramsAlmonds.items[0].grams, "15 unidades no son 15 gramos");
+assert.equal(api.interpret("1.5 almendras").items[0].grams, 1.8, "decimales por unidad conservan la arquitectura");
+assert.equal(api.interpret("almendras").requiresConfirmation, true, "sin cantidad requiere revisión");
 assert.equal(halfBanana.items[0].estimated, false);
 
 assert.equal(api.interpret("1 taza de arroz").items[0].grams, 195);

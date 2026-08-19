@@ -11,6 +11,8 @@
         food("tomato", "Tomate", ["tomate", "tomates"], { calories: 18, protein: 0.9, carbs: 3.9, fat: 0.2 }, { value: 1, unit: "unit", grams: 120 }, { unit: 120, slice: 20, cup: 180 }),
         food("banana", "Banana", ["banana", "bananas", "platano"], { calories: 89, protein: 1.1, carbs: 22.8, fat: 0.3 }, { value: 1, unit: "unit", grams: 118 }, { unit: 118, slice: 12, cup: 150 }),
         food("apple", "Manzana", ["manzana", "manzanas"], { calories: 52, protein: 0.3, carbs: 13.8, fat: 0.2 }, { value: 1, unit: "unit", grams: 180 }, { unit: 180, slice: 18, cup: 125 }),
+        // USDA FoodData Central FDC 170567, "Nuts, almonds": valores por 100 g; 1 almendra = 1,2 g.
+        food("almond", "Almendra", ["almendra", "almendras"], { calories: 579, protein: 21.15, carbs: 21.55, fat: 49.93 }, { value: 1, unit: "unit", grams: 1.2 }, { unit: 1.2 }),
         food("yogurt", "Yogur", ["yogur", "yogurt", "yogures"], { calories: 72, protein: 4, carbs: 9.6, fat: 2 }, { value: 1, unit: "portion", grams: 125 }, { portion: 125, cup: 245, tbsp: 15 }),
         food("milk", "Leche", ["leche"], { calories: 61, protein: 3.2, carbs: 4.8, fat: 3.3 }, { value: 1, unit: "glass", grams: 200 }, { glass: 200, cup: 240, tbsp: 15, tsp: 5 }),
         food("oats", "Avena", ["avena"], { calories: 389, protein: 16.9, carbs: 66.3, fat: 6.9 }, { value: 40, unit: "g", grams: 40 }, { cup: 80, tbsp: 10, tsp: 3 }),
@@ -67,7 +69,7 @@
 
     root.ForzaSmartText = {
         __catalog: Object.freeze({
-            version: 2,
+            version: 3,
             foods: Object.freeze(catalog),
             dishes: Object.freeze(dishes)
         })

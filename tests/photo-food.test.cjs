@@ -58,6 +58,25 @@ assert.equal(typeof api.processImage, "function");
   assert.equal(api.validateResponse({ items: [], uncertainties: [] }), true);
   assert.equal(api.validateResponse({ items: [{ name: "pollo", foodConfidence: 2 }], uncertainties: [] }), false);
 
+  const almondProposalText = api.proposalToText({ items: [{
+    name: "almendras", preparation: null, estimatedPortion: "normal", estimatedGrams: 30,
+    foodConfidence: .95, quantityConfidence: .8, notes: "cantidad aproximada"
+  }], uncertainties: [] });
+  assert.equal(almondProposalText, "30 g de almendras");
+  const smartContext = { console, Date, Math, Number, String, Object, Array, Map, Set, JSON };
+  smartContext.window = smartContext;
+  vm.createContext(smartContext);
+  vm.runInContext(fs.readFileSync("smart-text-catalog.js", "utf8"), smartContext);
+  vm.runInContext(fs.readFileSync("smart-text.js", "utf8"), smartContext);
+  const almondFromPhoto = smartContext.ForzaSmartText.interpret(almondProposalText);
+  assert.equal(almondFromPhoto.items[0].catalogId, "almond", "Photo Food llega al catálogo almond");
+  assert.equal(almondFromPhoto.items[0].grams, 30);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(almondFromPhoto.totals)),
+    { calories: 173.7, protein: 6.3, carbs: 6.5, fat: 15 },
+    "Photo Food usa el cálculo nutricional local"
+  );
+
   const html = fs.readFileSync("index.html", "utf8");
   const configSource = fs.readFileSync("photo-food-config.js", "utf8");
   assert.match(html, /capture="environment"/);

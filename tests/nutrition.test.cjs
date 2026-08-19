@@ -98,6 +98,14 @@ assert.deepEqual(
     { calories: 106.8, protein: 1.3, carbs: 27.4, fat: 0.4 },
     "Photo Food banana 120 g con decimales puede guardarse"
 );
+assert.deepEqual(
+    JSON.parse(JSON.stringify(api.normalizeMealNutrition({
+        rawText: "15 almendras", items: [{ catalogId: "almond", name: "Almendra", quantity: 15, unit: "unit", grams: 18 }],
+        calories: 104.2, protein: 3.8, carbs: 3.9, fat: 9
+    }))),
+    { calories: 104.2, protein: 3.8, carbs: 3.9, fat: 9 },
+    "los valores calculados de almendras cumplen el contrato de guardado Nutrition"
+);
 assert.throws(() => api.normalizeMealNutrition({ calories: "", protein: "1.3", carbs: "", fat: "" }), /invalid_nutrition_number/);
 assert.throws(() => api.normalizeMealNutrition({ calories: "106.8", protein: "texto", carbs: "", fat: "" }), /invalid_nutrition_number/);
 assert.throws(() => api.normalizeMealNutrition({ calories: "106.8", protein: "1.3", carbs: "NaN", fat: "" }), /invalid_nutrition_number/);
