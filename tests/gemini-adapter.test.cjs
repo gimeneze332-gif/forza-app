@@ -42,6 +42,8 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.match(PHOTO_FOOD_PROMPT, /sartén, olla, horno, air fryer/);
   assert.match(PHOTO_FOOD_PROMPT, /No inventes gramos ni preparación/);
   assert.match(PHOTO_FOOD_PROMPT, /No descartes un alimento reconocible solo por estar cocinándose/);
+  assert.match(PHOTO_FOOD_PROMPT, /Solo indicá preparation cuando el método de preparación sea visualmente claro/);
+  assert.match(PHOTO_FOOD_PROMPT, /Ante la duda usá preparation null/);
   assert.equal(/nombre del usuario|email|entrenamiento del usuario/i.test(captured.options.body), false);
 
   assert.equal(validateProviderProposal(valid), true);
@@ -52,6 +54,11 @@ global.btoa ||= value => Buffer.from(value, "binary").toString("base64");
   assert.equal(validateProviderProposal({ ...valid, items: [{ ...valid.items[0], identityConfidence: .2 }] }), true, "baja confianza");
   assert.equal(validateProviderProposal({ schemaVersion: 1, items: [], unknownComponents: [], uncertainties: [] }), true, "foto sin comida");
   assert.throws(() => normalizeVisualProposal({ ...valid, unexpected: true }), /invalid_provider_response/, "schema inválido");
+  assert.equal(normalizeVisualProposal(valid).items[0].estimatedGrams, null, "normalización moderna preserva gramos desconocidos");
+  assert.equal(normalizeVisualProposal({ items: [{ name: "pollo", estimatedGrams: undefined, foodConfidence: .8 }], uncertainties: [] }).items[0].estimatedGrams, null, "undefined permanece desconocido");
+  assert.equal(normalizeVisualProposal({ items: [{ name: "banana", estimatedGrams: "120", foodConfidence: .9 }], uncertainties: [] }).items[0].estimatedGrams, 120, "string numérico válido se normaliza");
+  assert.equal(normalizeVisualProposal({ items: [{ name: "pollo", estimatedGrams: "inválido", foodConfidence: .8 }], uncertainties: [] }).items[0].estimatedGrams, null, "gramos inválidos quedan desconocidos");
+  assert.equal(normalizeVisualProposal({ items: [{ name: "pollo", preparation: "a la plancha", estimatedGrams: 150, foodConfidence: .9 }], uncertainties: [] }).items[0].preparation, "a la plancha", "preparación explícita válida se conserva");
 
   const cookingCases = [
     { ...valid.items[0], name: "pollo", preparation: "en sartén", estimatedGrams: null },

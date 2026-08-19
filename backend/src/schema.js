@@ -31,7 +31,9 @@ export function normalizeVisualProposal(value) {
         name: String(item?.name || "").trim().slice(0, 80),
         preparation: item?.preparation ? String(item.preparation).trim().slice(0, 60) : null,
         estimatedPortion: ["small", "normal", "large"].includes(item?.estimatedPortion) ? item.estimatedPortion : null,
-        estimatedGrams: Number.isFinite(Number(item?.estimatedGrams)) ? Math.round(Number(item.estimatedGrams)) : null,
+        estimatedGrams: item?.estimatedGrams == null
+          ? null
+          : Number.isFinite(Number(item.estimatedGrams)) ? Math.round(Number(item.estimatedGrams)) : null,
         identityConfidence: item?.identityConfidence == null && item?.foodConfidence == null ? null : Number.isFinite(identityConfidence) ? identityConfidence : null,
         foodConfidence: item?.identityConfidence == null && item?.foodConfidence == null ? null : Number.isFinite(identityConfidence) ? identityConfidence : null,
         quantityConfidence: item?.quantityConfidence == null ? null : Number.isFinite(Number(item.quantityConfidence)) ? Number(item.quantityConfidence) : null,

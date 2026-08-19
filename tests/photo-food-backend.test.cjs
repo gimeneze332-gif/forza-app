@@ -19,6 +19,7 @@ class MemoryStorage {
   assert.match(deploymentConfig, /"invocation_logs":\s*false/);
   const { createHandler } = await import("../backend/src/index.js");
   const { PhotoFoodState } = await import("../backend/src/photo-food-state.js");
+  const { normalizeVisualProposal } = await import("../backend/src/schema.js");
   const { safeLog } = await import("../backend/src/logging.js");
   const storage = new MemoryStorage();
   const durable = new PhotoFoodState({ storage });
@@ -27,6 +28,9 @@ class MemoryStorage {
     PHOTO_FOOD_STATE: { idFromName: () => "personal", get: () => ({ fetch: (url, init) => durable.fetch(new Request(url, init)) }) }
   };
   const handle = createHandler();
+  const unknownQuantity = normalizeVisualProposal({ items: [{ name: "pollo", preparation: null, estimatedPortion: null, estimatedGrams: null, foodConfidence: .8, quantityConfidence: .3 }], uncertainties: [] });
+  assert.equal(unknownQuantity.items[0].estimatedGrams, null, "backend preserva estimatedGrams null");
+  assert.notEqual(unknownQuantity.items[0].estimatedGrams, 0, "backend nunca representa ausencia como cero");
   const origin = env.ALLOWED_ORIGIN;
   const call = (path, init = {}) => handle(new Request(`https://worker.test${path}`, { method: "POST", ...init, headers: { origin, ...(init.headers || {}) } }), env);
 

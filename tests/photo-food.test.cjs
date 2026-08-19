@@ -97,6 +97,8 @@ assert.equal(typeof api.processImage, "function");
   assert.ok(html.includes("No pude analizar la foto"));
   assert.ok(source.includes("No pude reconocer bien esta foto."), "fallback simple sin detalle técnico");
   assert.equal(source.includes("confianza ${confidence"), false, "la interfaz no muestra confianza técnica");
+  assert.ok(source.includes('grams.value = item.estimatedGrams ?? ""'), "el frontend representa gramos null como campo vacío");
+  assert.ok(source.includes('prep.value = item.preparation || ""'), "el frontend representa preparación null como campo vacío");
   assert.ok(html.indexOf('<script src="script.js"></script>') < html.indexOf('<script src="photo-food.js"></script>'));
   assert.ok(html.indexOf('<script src="photo-food-config.js"></script>') < html.indexOf('<script src="photo-food.js"></script>'));
   assert.ok(html.indexOf('<script src="photo-food.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'));

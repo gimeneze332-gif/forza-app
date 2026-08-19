@@ -18,6 +18,9 @@ Las imágenes pueden mostrar alimentos en sartén, olla, horno, air fryer, duran
 Si la identidad del alimento es reconocible, incluí el alimento aunque no puedas determinar con seguridad la preparación, la porción o los gramos.
 En esos casos usá preparation null, estimatedPortion null y estimatedGrams null; quantityConfidence puede ser baja y notes debe incluir "Revisá la cantidad".
 No inventes gramos ni preparación. No descartes un alimento reconocible solo por estar cocinándose.
+Solo indicá preparation cuando el método de preparación sea visualmente claro.
+No infieras horno, sartén, hervido, frito, air fryer u otro método si no puede determinarse con suficiente seguridad.
+Ante la duda usá preparation null: es preferible null antes que inventar una preparación.
 Si no hay referencia suficiente para gramos, usá null y priorizá small, normal o large.
 Si algo no puede identificarse, agregalo a unknownComponents. Si no hay comida, devolvé items y unknownComponents vacíos.
 Priorizá precisión sobre completar la respuesta. Ante cualquier duda usá null, confianza baja o uncertainties.`;
