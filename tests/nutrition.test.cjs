@@ -146,6 +146,63 @@ const frequent = api.getFrequentMeals([
 assert.equal(frequent.length, 1);
 assert.equal(frequent[0].createdAt, "2");
 
+const historyEntries = [
+    { id: "old-day", date: "2026-08-06", rawText: "Otro día", createdAt: "2026-08-06T20:00:00.000Z", calories: 900, protein: 90 },
+    { id: "one", date: "2026-08-07", rawText: "Primera", createdAt: "2026-08-07T08:00:00.000Z", calories: 100, protein: 10 },
+    { id: "two", date: "2026-08-07", rawText: "Segunda", createdAt: "2026-08-07T12:00:00.000Z", calories: 200, protein: 20 },
+    { id: "three", date: "2026-08-07", rawText: "Tercera", createdAt: "2026-08-07T16:00:00.000Z", calories: 300, protein: 30 },
+    { id: "four", date: "2026-08-07", rawText: "Cuarta", createdAt: "2026-08-07T18:00:00.000Z", calories: 400, protein: 40 },
+    { id: "five", date: "2026-08-07", rawText: "Quinta", createdAt: "2026-08-07T20:00:00.000Z", calories: 500, protein: 50 },
+    { date: "2026-08-07", rawText: "Legado", calories: 50, protein: 5 }
+];
+assert.deepEqual(Array.from(api.getTodayMeals("2026-08-08", historyEntries)), [], "estado vacío");
+const todayHistory = api.getTodayMeals("2026-08-07", historyEntries);
+assert.equal(todayHistory.length, 6, "incluye solo el día actual");
+assert.equal(todayHistory.some(item => item.rawText === "Otro día"), false, "excluye otros días");
+assert.deepEqual(Array.from(todayHistory.slice(0, 5), item => item.id), ["five", "four", "three", "two", "one"], "ordena createdAt descendente");
+assert.equal(todayHistory.at(-1).rawText, "Legado", "sin createdAt queda al final");
+assert.equal(api.getVisibleTodayMeals("2026-08-07", historyEntries).length, 4, "muestra máximo cuatro");
+assert.equal(api.getVisibleTodayMeals("2026-08-07", historyEntries, true).length, 6, "Ver todas expande");
+assert.equal(api.getVisibleTodayMeals("2026-08-07", historyEntries, false).length, 4, "Mostrar menos vuelve a cuatro");
+assert.equal(api.isSafeEntryId(historyEntries.at(-1), historyEntries), false, "registro sin id no es editable");
+
+const editableEntry = {
+    id: "edit-me", date: "2026-08-07", createdAt: "2026-08-07T10:00:00.000Z",
+    rawText: "Banana", items: [{ name: "banana" }], calories: 106.8, protein: 1.3,
+    carbs: null, fat: null, source: "frequent", isFavorite: true, recognition: "smart-text-v1"
+};
+const renamed = api.updateMealEntry([editableEntry], "edit-me", {
+    rawText: "Banana madura", calories: "107.2", protein: "1.4", carbs: "", fat: ""
+})[0];
+assert.equal(renamed.rawText, "Banana madura", "edita Alimento");
+assert.equal(renamed.calories, 107.2, "edita decimal con punto");
+assert.equal(renamed.protein, 1.4);
+assert.equal(renamed.carbs, null, "carbs null se conserva correctamente");
+assert.equal(renamed.fat, null, "fat null se conserva correctamente");
+assert.equal(renamed.source, "frequent", "frecuente original intacto");
+assert.equal(renamed.isFavorite, true);
+assert.deepEqual(JSON.parse(JSON.stringify(renamed.items)), [{ name: "banana" }], "metadatos intactos");
+const commaEdited = api.updateMealEntry([editableEntry], "edit-me", {
+    rawText: "Banana", calories: "106,8", protein: "1,3", carbs: "27,4", fat: "0,4"
+})[0];
+assert.deepEqual(
+    { calories: commaEdited.calories, protein: commaEdited.protein, carbs: commaEdited.carbs, fat: commaEdited.fat },
+    { calories: 106.8, protein: 1.3, carbs: 27.4, fat: 0.4 },
+    "edición acepta coma decimal"
+);
+assert.throws(() => api.updateMealEntry([historyEntries.at(-1)], undefined, {
+    rawText: "Legado", calories: "50", protein: "5", carbs: "", fat: ""
+}), /unsafe_nutrition_entry/, "registro sin id no puede editarse");
+
+const beforeEditTotals = api.calculateDailyTotals("2026-08-07", [editableEntry], [{ date: "2026-08-07", milliliters: 250 }]);
+const afterEditTotals = api.calculateDailyTotals("2026-08-07", [commaEdited], [{ date: "2026-08-07", milliliters: 250 }]);
+assert.equal(beforeEditTotals.water, 250);
+assert.equal(afterEditTotals.water, 250, "editar no altera agua");
+assert.equal(afterEditTotals.carbs, 27.4, "totales se actualizan después de editar");
+assert.deepEqual(Array.from(api.deleteMealEntry([editableEntry], "edit-me")), [], "eliminación quita el registro");
+assert.equal(api.calculateDailyTotals("2026-08-07", api.deleteMealEntry([editableEntry], "edit-me"), []).calories, 0, "totales se actualizan después de eliminar");
+assert.throws(() => api.deleteMealEntry([historyEntries.at(-1)], undefined), /unsafe_nutrition_entry/, "registro sin id no puede eliminarse");
+
 assert.equal(typeof domReady, "function");
 domReady();
 assert.equal(JSON.stringify([...gymStorage.entries()]), storageBefore);
@@ -174,6 +231,14 @@ assert.match(html, /id="nutrition-review-calories"[^>]+type="text"[^>]+inputmode
 assert.match(html, /id="nutrition-review-protein"[^>]+type="text"[^>]+inputmode="decimal"/);
 assert.match(html, /id="nutrition-review-carbs"[^>]+type="text"[^>]+inputmode="decimal"/);
 assert.match(html, /id="nutrition-review-fat"[^>]+type="text"[^>]+inputmode="decimal"/);
+assert.ok(html.includes('id="nutrition-today-list"'));
+assert.ok(html.includes('id="nutrition-today-toggle"'));
+assert.ok(html.includes("Comidas de hoy"));
+assert.match(html, /id="nutrition-history-food"[^>]+type="text"/);
+assert.ok(html.includes("¿Eliminar esta comida?" ) || source.includes("¿Eliminar esta comida?"));
+assert.ok(source.includes('cancel.textContent = "Cancelar"'), "cancelación de eliminación disponible");
+assert.ok(source.includes('todayExpanded ? "Mostrar menos" : `Ver todas (${todayMeals.length})`'));
+assert.ok(source.includes("✓ Comida eliminada"));
 assert.equal(html.includes("Registro rápido"), false);
 assert.equal(source.includes("Catálogo local:"), false);
 assert.ok(source.includes("No pude reconocer esto"));

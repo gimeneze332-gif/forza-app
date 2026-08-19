@@ -36,6 +36,9 @@
     let closeTimer = null;
     let toastTimer = null;
     let returnFocus = null;
+    let todayExpanded = false;
+    let selectedEntryId = null;
+    let editingEntryId = null;
 
     function normalizeText(value) {
         return String(value || "").normalize("NFD")
@@ -199,6 +202,52 @@
         return [...unique.values()].slice(0, 8);
     }
 
+    function createdAtTime(entry) {
+        if (!entry?.createdAt) return null;
+        const value = Date.parse(entry.createdAt);
+        return Number.isFinite(value) ? value : null;
+    }
+
+    function getTodayMeals(day = dateKey(), meals = entries) {
+        return meals.filter(item => item?.date === day).map((item, index) => ({ item, index, time: createdAtTime(item) }))
+            .sort((left, right) => {
+                if (left.time == null && right.time == null) return left.index - right.index;
+                if (left.time == null) return 1;
+                if (right.time == null) return -1;
+                return right.time - left.time || right.index - left.index;
+            }).map(row => row.item);
+    }
+
+    function getVisibleTodayMeals(day = dateKey(), meals = entries, expanded = false) {
+        const todayMeals = getTodayMeals(day, meals);
+        return expanded ? todayMeals : todayMeals.slice(0, 4);
+    }
+
+    function isSafeEntryId(entry, meals = entries) {
+        if (typeof entry?.id !== "string" || !entry.id.trim()) return false;
+        return meals.filter(item => item?.id === entry.id).length === 1;
+    }
+
+    function updateMealEntry(meals, entryId, changes) {
+        const current = meals.find(item => item?.id === entryId);
+        if (!current || !isSafeEntryId(current, meals)) throw new Error("unsafe_nutrition_entry");
+        const rawText = String(changes.rawText || "").trim();
+        if (!rawText) throw new Error("invalid_nutrition_name");
+        const nutrition = normalizeMealNutrition(changes);
+        return meals.map(item => item === current ? { ...item, rawText, ...nutrition } : item);
+    }
+
+    function deleteMealEntry(meals, entryId) {
+        const current = meals.find(item => item?.id === entryId);
+        if (!current || !isSafeEntryId(current, meals)) throw new Error("unsafe_nutrition_entry");
+        return meals.filter(item => item !== current);
+    }
+
+    function formatNutritionValue(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number.toLocaleString("es-AR", { maximumFractionDigits: 10 }) : "0";
+    }
+
     function smartTextApi() {
         const api = typeof window !== "undefined" ? window.ForzaSmartText : null;
         return api && typeof api.interpret === "function" ? api : null;
@@ -348,6 +397,110 @@
         el.water.textContent = target(totals.water, settings?.water, "ml");
     }
 
+    function mealLabel(meal) {
+        const rawText = String(meal?.rawText || "").trim();
+        if (rawText) return rawText;
+        const itemNames = Array.isArray(meal?.items)
+            ? meal.items.map(item => String(item?.name || item?.sourceText || "").trim()).filter(Boolean)
+            : [];
+        return itemNames.join(", ") || "Comida";
+    }
+
+    function renderTodayMeals() {
+        if (!el.todayList) return;
+        const todayMeals = getTodayMeals();
+        const visible = getVisibleTodayMeals(dateKey(), entries, todayExpanded);
+        el.todayList.innerHTML = "";
+        if (!visible.length) {
+            const empty = document.createElement("p");
+            empty.className = "nutrition-today-empty";
+            empty.textContent = "Aún no registraste comidas hoy.";
+            el.todayList.appendChild(empty);
+        }
+        visible.forEach(meal => {
+            const safe = isSafeEntryId(meal);
+            const row = document.createElement(safe ? "button" : "article");
+            if (safe) row.type = "button";
+            row.className = `nutrition-today-item${safe ? "" : " is-readonly"}`;
+            const title = document.createElement("strong");
+            title.textContent = mealLabel(meal);
+            const detail = document.createElement("span");
+            detail.textContent = `${formatNutritionValue(meal.calories)} kcal · ${formatNutritionValue(meal.protein)} g proteína`;
+            row.append(title, detail);
+            if (safe) row.addEventListener("click", () => {
+                selectedEntryId = selectedEntryId === meal.id ? null : meal.id;
+                renderTodayMeals();
+            });
+            el.todayList.appendChild(row);
+            if (safe && selectedEntryId === meal.id) el.todayList.appendChild(createTodayActions(meal));
+        });
+        const hasMore = todayMeals.length > 4;
+        el.todayToggle.hidden = !hasMore;
+        el.todayToggle.textContent = todayExpanded ? "Mostrar menos" : `Ver todas (${todayMeals.length})`;
+    }
+
+    function createTodayActions(meal) {
+        const actions = document.createElement("div");
+        actions.className = "nutrition-today-actions";
+        const edit = document.createElement("button");
+        edit.type = "button"; edit.className = "nutrition-text-button"; edit.textContent = "Editar";
+        edit.addEventListener("click", () => beginHistoryEdit(meal));
+        const remove = document.createElement("button");
+        remove.type = "button"; remove.className = "nutrition-text-button nutrition-delete-button"; remove.textContent = "Eliminar";
+        remove.addEventListener("click", () => renderDeleteConfirmation(meal, actions));
+        actions.append(edit, remove);
+        return actions;
+    }
+
+    function renderDeleteConfirmation(meal, container) {
+        container.innerHTML = "";
+        const question = document.createElement("p");
+        question.textContent = "¿Eliminar esta comida?";
+        const cancel = document.createElement("button");
+        cancel.type = "button"; cancel.className = "nutrition-text-button"; cancel.textContent = "Cancelar";
+        cancel.addEventListener("click", () => { selectedEntryId = null; renderTodayMeals(); });
+        const confirm = document.createElement("button");
+        confirm.type = "button"; confirm.className = "nutrition-delete-confirm"; confirm.textContent = "Eliminar";
+        confirm.addEventListener("click", () => {
+            entries = deleteMealEntry(entries, meal.id);
+            write(STORAGE.entries, entries);
+            selectedEntryId = null;
+            renderTodayMeals(); renderCard(); announce("✓ Comida eliminada");
+        });
+        container.append(question, cancel, confirm);
+    }
+
+    function beginHistoryEdit(meal) {
+        if (!isSafeEntryId(meal)) return;
+        editingEntryId = meal.id;
+        el.historyFood.value = mealLabel(meal);
+        el.historyCalories.value = meal.calories ?? "";
+        el.historyProtein.value = meal.protein ?? "";
+        el.historyCarbs.value = meal.carbs ?? "";
+        el.historyFat.value = meal.fat ?? "";
+        el.feedback.textContent = "";
+        show("history-edit");
+        el.historyFood.focus({ preventScroll: true });
+    }
+
+    function saveHistoryEdit(event) {
+        event.preventDefault();
+        try {
+            entries = updateMealEntry(entries, editingEntryId, {
+                rawText: el.historyFood.value, calories: el.historyCalories.value,
+                protein: el.historyProtein.value, carbs: el.historyCarbs.value, fat: el.historyFat.value
+            });
+        } catch (error) {
+            el.feedback.textContent = error?.message === "invalid_nutrition_name"
+                ? "Ingresá el alimento." : "Ingresá un número válido.";
+            return;
+        }
+        write(STORAGE.entries, entries);
+        editingEntryId = null; selectedEntryId = null;
+        el.feedback.textContent = "";
+        renderTodayMeals(); renderCard(); show("entry"); announce("✓ Comida actualizada");
+    }
+
     function announce(message) {
         window.clearTimeout(toastTimer);
         el.toast.textContent = message;
@@ -362,7 +515,9 @@
         el.setup.hidden = view !== "setup";
         el.entry.hidden = view !== "entry";
         el.reviewView.hidden = view !== "review";
-        el.sheetTitle.textContent = view === "setup" ? "Objetivos diarios" : "Registrar comida";
+        el.historyEdit.hidden = view !== "history-edit";
+        el.sheetTitle.textContent = view === "setup" ? "Objetivos diarios"
+            : view === "history-edit" ? "Editar comida" : "Registrar comida";
         if (el.sheet) el.sheet.scrollTop = 0;
     }
 
@@ -372,6 +527,9 @@
         el.modal.hidden = false;
         document.body.style.overflow = "hidden";
         el.feedback.textContent = "";
+        selectedEntryId = null;
+        todayExpanded = false;
+        renderTodayMeals();
         show(settings ? "entry" : "setup");
         window.requestAnimationFrame(() => {
             el.modal.classList.add("is-open");
@@ -387,6 +545,7 @@
         el.modal.classList.remove("is-open");
         document.body.style.overflow = "";
         draft = null;
+        editingEntryId = null;
         if (window.ForzaPhotoFood?.reset) window.ForzaPhotoFood.reset();
         closeTimer = window.setTimeout(() => {
             el.modal.hidden = true;
@@ -430,7 +589,7 @@
             button.appendChild(detail);
             button.addEventListener("click", () => {
                 saveMeal({ ...meal, source: "frequent", isFavorite: true });
-                renderCard(); close(); announce("✓ Comida registrada");
+                renderTodayMeals(); renderCard(); close(); announce("✓ Comida registrada");
             });
             el.frequentList.appendChild(button);
         });
@@ -505,7 +664,7 @@
                 meals.push(definition); write(STORAGE.meals, meals);
             }
         }
-        el.mealText.value = ""; renderCard(); close(); announce("✓ Comida registrada");
+        el.mealText.value = ""; renderTodayMeals(); renderCard(); close(); announce("✓ Comida registrada");
     }
 
     function collect() {
@@ -521,7 +680,11 @@
             saveForm: get("save-form"), reviewCalories: get("review-calories"), reviewProtein: get("review-protein"),
             reviewCarbs: get("review-carbs"), reviewFat: get("review-fat"), reviewFavorite: get("review-favorite"),
             reviewMealName: get("review-meal-name"), smartDetails: get("smart-details"), saveAction: document.querySelector(".nutrition-save-action"), feedback: get("feedback"),
-            calories: get("calories"), protein: get("protein"), water: get("water"), toast: get("toast")
+            calories: get("calories"), protein: get("protein"), water: get("water"), toast: get("toast"),
+            todayList: get("today-list"), todayToggle: get("today-toggle"), historyEdit: get("history-edit"),
+            historyEditBack: get("history-edit-back"), historyEditForm: get("history-edit-form"),
+            historyFood: get("history-food"), historyCalories: get("history-calories"), historyProtein: get("history-protein"),
+            historyCarbs: get("history-carbs"), historyFat: get("history-fat")
         };
     }
 
@@ -550,6 +713,9 @@
         el.review.addEventListener("click", review);
         el.reviewBack.addEventListener("click", () => show("entry"));
         el.saveForm.addEventListener("submit", saveReviewed);
+        el.todayToggle.addEventListener("click", () => { todayExpanded = !todayExpanded; renderTodayMeals(); });
+        el.historyEditBack.addEventListener("click", () => { editingEntryId = null; show("entry"); renderTodayMeals(); });
+        el.historyEditForm.addEventListener("submit", saveHistoryEdit);
         document.addEventListener("keydown", event => { if (event.key === "Escape" && !el.modal.hidden) close(); });
         try {
             window.ForzaPhotoFood?.init({
@@ -561,10 +727,10 @@
             const button = Array.from(el.optionButtons).find(item => item.dataset.nutritionView === "photo");
             if (button) button.hidden = true;
         }
-        renderCard();
+        renderTodayMeals(); renderCard();
     }
 
-    const api = Object.freeze({ STORAGE, parseMealText, parseNutritionNumber, normalizeMealNutrition, calculateDailyTotals, getDailyStatus, getFrequentMeals, normalizeText });
+    const api = Object.freeze({ STORAGE, parseMealText, parseNutritionNumber, normalizeMealNutrition, calculateDailyTotals, getDailyStatus, getFrequentMeals, getTodayMeals, getVisibleTodayMeals, isSafeEntryId, updateMealEntry, deleteMealEntry, formatNutritionValue, normalizeText });
     if (typeof window !== "undefined") window.ForzaNutrition = api;
     if (typeof document !== "undefined") document.addEventListener("DOMContentLoaded", () => {
         try { init(); }

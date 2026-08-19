@@ -81,6 +81,8 @@
 .nutrition-option:focus-visible,
 .nutrition-icon-button:focus-visible,
 .nutrition-frequent-item:focus-visible,
+.nutrition-today-item:focus-visible,
+.nutrition-delete-confirm:focus-visible,
 .smart-text-choices button:focus-visible,
 .nutrition-view input:focus-visible,
 .nutrition-view textarea:focus-visible {
@@ -117,6 +119,88 @@
 .nutrition-view[hidden],
 #nutrition-frequent-view[hidden] {
     display: none;
+}
+
+.nutrition-today {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid #E5E7EB;
+}
+
+.nutrition-today h3 {
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.nutrition-today-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.nutrition-today-item {
+    display: block;
+    width: 100%;
+    min-height: 54px;
+    padding: 10px 12px;
+    border: 1px solid #E5E7EB;
+    border-radius: 13px;
+    background: #FFFFFF;
+    color: #1F2937;
+    text-align: left;
+}
+
+.nutrition-today-item strong,
+.nutrition-today-item span {
+    display: block;
+}
+
+.nutrition-today-item span,
+.nutrition-today-empty {
+    margin-top: 3px;
+    color: #6B7280;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.nutrition-today-item.is-readonly {
+    opacity: .78;
+}
+
+.nutrition-today-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 5px 4px 8px;
+}
+
+.nutrition-today-actions p {
+    flex: 1 0 100%;
+    margin: 2px 0 0;
+    font-weight: 700;
+}
+
+.nutrition-delete-button,
+.nutrition-delete-confirm {
+    color: #B42318;
+}
+
+.nutrition-delete-confirm {
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid rgba(180, 35, 24, .25);
+    background: rgba(180, 35, 24, .08);
+}
+
+.nutrition-today-toggle {
+    width: 100%;
+    margin-top: 7px;
+}
+
+.nutrition-history-food {
+    grid-column: 1 / -1;
 }
 
 .nutrition-modal {
@@ -512,6 +596,16 @@ body.dark-mode .nutrition-recognition-note.warning {
     border-color: #A78016;
     background: #3A3217;
     color: #FDE68A;
+}
+
+body.dark-mode .nutrition-today {
+    border-top-color: #374151;
+}
+
+body.dark-mode .nutrition-today-item {
+    border-color: #374151;
+    background: #1F2937;
+    color: #F9FAFB;
 }
 
 @media (max-width: 700px) {

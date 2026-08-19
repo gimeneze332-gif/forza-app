@@ -1063,6 +1063,12 @@
                     <button id="photo-food-retry" class="photo-food-secondary" type="button">Reintentar</button>
                 </div>
             </div>
+
+            <section class="nutrition-today" aria-labelledby="nutrition-today-title">
+                <h3 id="nutrition-today-title">Comidas de hoy</h3>
+                <div id="nutrition-today-list" class="nutrition-today-list"></div>
+                <button id="nutrition-today-toggle" class="nutrition-text-button nutrition-today-toggle" type="button" hidden></button>
+            </section>
         </div>
 
         <div id="nutrition-review-view" class="nutrition-view" hidden>
@@ -1098,6 +1104,29 @@
                         </label>
                     </div>
                 </details>
+            </form>
+        </div>
+
+        <div id="nutrition-history-edit" class="nutrition-view" hidden>
+            <button id="nutrition-history-edit-back" class="nutrition-text-button" type="button">← Volver</button>
+            <h3 class="nutrition-review-title">Editar comida</h3>
+            <form id="nutrition-history-edit-form" class="nutrition-review-form">
+                <label class="nutrition-history-food">Alimento
+                    <input id="nutrition-history-food" type="text" maxlength="160" required>
+                </label>
+                <label>Calorías
+                    <input id="nutrition-history-calories" type="text" inputmode="decimal" required>
+                </label>
+                <label>Proteína (g)
+                    <input id="nutrition-history-protein" type="text" inputmode="decimal" required>
+                </label>
+                <label>Carbohidratos (g) · opcional
+                    <input id="nutrition-history-carbs" type="text" inputmode="decimal">
+                </label>
+                <label>Grasas (g) · opcional
+                    <input id="nutrition-history-fat" type="text" inputmode="decimal">
+                </label>
+                <button class="nutrition-primary-button" type="submit">Guardar cambios</button>
             </form>
         </div>
 
