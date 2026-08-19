@@ -5,6 +5,8 @@ import { safeLog, safeStageLog } from "./logging.js";
 import { analyzeMock } from "./mock-provider.js";
 import { analyzeFoodImage as analyzeWithGemini, listAvailableGeminiModels } from "./gemini-adapter.js";
 import { analyzeFoodImage as analyzeWithCloudflareAI } from "./cloudflare-ai-adapter.js";
+import { estimateUnknownFoods } from "./nutrition-fallback-adapter.js";
+import { validateFallbackRequest } from "./nutrition-fallback-schema.js";
 export { PhotoFoodState } from "./photo-food-state.js";
 
 const TIMEOUT_MS = 12000;
@@ -99,6 +101,32 @@ export function createHandler() {
     if (url.pathname === "/device/revoke") {
       const response = await stateRequest(env, "/device/revoke", { method: "POST", headers: { authorization: `Bearer ${bearerToken(request)}` } });
       return json(await response.json(), response.status, cors);
+    }
+    if (url.pathname === "/nutrition-fallback/estimate") {
+      if (env.NUTRITION_FALLBACK_ENABLED !== "true") return json({ error: "fallback_disabled", requestId }, 503, cors);
+      if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) return json({ error: "unsupported_content_type", requestId }, 415, cors);
+      let body; try { body = await request.json(); } catch (_) { return json({ error: "invalid_json", requestId }, 400, cors); }
+      if (!validateFallbackRequest(body)) return json({ error: "invalid_fallback_request", requestId }, 400, cors);
+      const auth = await stateRequest(env, "/nutrition-fallback/start", { method: "POST", headers: { authorization: `Bearer ${bearerToken(request)}` } });
+      if (!auth.ok) return json(await auth.json(), auth.status, cors);
+      const quotaStart = await auth.json(); let status = 200; let genericError = null; let usage = null; let model = "gemini-3.5-flash-lite";
+      const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const onDiagnostic = details => safeStageLog({ requestId, provider: "gemini", model, ...details });
+      onDiagnostic({ stage: "nutrition_fallback_request_received" });
+      try {
+        if (!env.GEMINI_API_KEY) throw new Error("gemini_disabled");
+        const estimated = await estimateUnknownFoods(body, { apiKey: env.GEMINI_API_KEY, signal: controller.signal, onDiagnostic });
+        usage = estimated.usage; model = estimated.model;
+        return json({ ...estimated.proposal, quota: { dailyRemaining: quotaStart.dailyRemaining, monthlyRemaining: quotaStart.monthlyRemaining } }, 200, cors);
+      } catch (error) {
+        const rate = error.message === "provider_rate_limit"; const timeout = error.message === "provider_timeout";
+        status = timeout ? 504 : rate ? 429 : 502; genericError = timeout ? "fallback_timeout" : rate ? "fallback_rate_limit" : "fallback_unavailable";
+        return json({ error: genericError, requestId }, status, cors);
+      } finally {
+        clearTimeout(timer); const finish = await stateRequest(env, "/nutrition-fallback/finish", { method: "POST" }); const quota = await finish.json().catch(() => ({}));
+        safeLog({ requestId, timestamp: new Date().toISOString(), status, durationMs: Date.now() - started, componentCount: body.foods.length, quotaRemaining: quota.dailyRemaining, monthlyQuotaRemaining: quota.monthlyRemaining, error: genericError, provider: "gemini", model,
+          inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, thinkingTokens: usage?.thinkingTokens, totalTokens: usage?.totalTokens });
+      }
     }
     if (url.pathname !== "/photo-food/analyze") return json({ error: "not_found", requestId }, 404, cors);
     if (env.PHOTO_ANALYSIS_ENABLED !== "true") return json({ error: "photo_analysis_disabled", requestId }, 503, cors);

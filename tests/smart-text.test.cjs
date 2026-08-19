@@ -15,6 +15,8 @@ function loadEngine(withCatalog = true) {
 }
 
 const api = loadEngine();
+assert.deepEqual(JSON.parse(JSON.stringify(api.parseExplicitMetricQuantity("150 g de merluza"))), { value: 150, unit: "g", grams: 150, explicit: true, estimated: false });
+assert.equal(api.parseExplicitMetricQuantity("15 almendras"), null);
 assert.equal(api.version, 1);
 assert.ok(api.catalogVersion > 0);
 assert.equal(Object.keys(api).includes("__catalog"), false, "El catálogo interno no queda expuesto");

@@ -9,6 +9,7 @@
     "BACKEND_ENABLED": "true",
     "PHOTO_ANALYSIS_ENABLED": "true",
     "PHOTO_FOOD_PROVIDER": "gemini",
+    "NUTRITION_FALLBACK_ENABLED": "false",
     "ALLOWED_ORIGIN": "https://gimeneze332-gif.github.io"
   },
   "secrets": {

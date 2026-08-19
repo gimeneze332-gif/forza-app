@@ -14,6 +14,7 @@ class MemoryStorage {
   assert.match(deploymentConfig, /"BACKEND_ENABLED":\s*"true"/);
   assert.match(deploymentConfig, /"PHOTO_ANALYSIS_ENABLED":\s*"true"/);
   assert.match(deploymentConfig, /"PHOTO_FOOD_PROVIDER":\s*"gemini"/);
+  assert.match(deploymentConfig, /"NUTRITION_FALLBACK_ENABLED":\s*"false"/);
   assert.match(deploymentConfig, /"observability":\s*\{[\s\S]*?"enabled":\s*true/);
   assert.match(deploymentConfig, /"invocation_logs":\s*false/);
   const { createHandler } = await import("../backend/src/index.js");
@@ -33,6 +34,7 @@ class MemoryStorage {
   assert.equal(response.status, 200, "healthcheck disponible con backend habilitado");
   assert.deepEqual(await response.json(), { status: "ok", analysisEnabled: false, provider: "mock" });
   assert.equal((await call("/photo-food/analyze", { headers: { authorization: "Bearer no-token", "content-type": "image/jpeg" }, body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]) })).status, 503, "análisis apagado responde 503");
+  assert.equal((await call("/nutrition-fallback/estimate", { headers: { "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1, foods: [{ clientRef: "u1", label: "merluza", grams: 150 }] }) })).status, 503, "fallback nutricional permanece apagado");
 
   const originalFetch = global.fetch;
   try {
@@ -90,6 +92,14 @@ class MemoryStorage {
   // Restore a valid token through a fresh pairing.
   response = await call("/pairing/create", { headers: { authorization: "Bearer admin-test-only" } }); const code2 = (await response.json()).code;
   response = await call("/pairing/claim", { headers: { "content-type": "application/json" }, body: JSON.stringify({ code: code2 }) }); const validToken = (await response.json()).token;
+  env.NUTRITION_FALLBACK_ENABLED = "true"; env.GEMINI_API_KEY = "gemini-secret-test";
+  let fallbackCalls = 0; global.fetch = async () => { fallbackCalls += 1; return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ schemaVersion: 1, foods: [{ clientRef: "u1", normalizedName: "Merluza", category: "fish", preparation: null, basis: "per_100g", calories: 90, protein: 18, carbs: 0, fat: 2, unitWeightGrams: null, confidenceBand: "medium" }] }) }] } }], usageMetadata: {} }), { status: 200 }); };
+  const fallbackBody = JSON.stringify({ schemaVersion: 1, foods: [{ clientRef: "u1", label: "merluza", grams: 150 }] });
+  response = await call("/nutrition-fallback/estimate", { headers: { authorization: `Bearer ${validToken}`, "content-type": "application/json" }, body: fallbackBody });
+  assert.equal(response.status, 200, "fallback autenticado funciona con mock HTTP"); assert.equal(fallbackCalls, 1, "una llamada y cero reintentos");
+  let fallbackState = await storage.get("state"); fallbackState.nutritionFallbackDaily = 10; fallbackState.nutritionFallbackDay = new Date().toISOString().slice(0, 10); fallbackState.nutritionFallbackBusy = false; await storage.put("state", fallbackState);
+  assert.equal((await call("/nutrition-fallback/estimate", { headers: { authorization: `Bearer ${validToken}`, "content-type": "application/json" }, body: fallbackBody })).status, 429, "límite textual diario antes de Gemini");
+  assert.equal(fallbackCalls, 1); env.NUTRITION_FALLBACK_ENABLED = "false"; delete env.GEMINI_API_KEY; global.fetch = originalFetch;
   const diagnosticLines = []; const originalConsoleLog = console.log; let validAnalysis;
   try { console.log = line => diagnosticLines.push(String(line)); validAnalysis = await analyze(validToken); }
   finally { console.log = originalConsoleLog; }

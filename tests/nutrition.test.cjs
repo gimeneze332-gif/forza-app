@@ -42,12 +42,14 @@ vm.createContext(context);
 vm.runInContext(source, context);
 
 const api = context.window.ForzaNutrition;
+assert.equal(api.STORAGE.learnedFoods, "forza_nutrition_learned_foods");
 assert.ok(api, "Nutrition expone únicamente su API aislada");
 assert.deepEqual(
     Object.values(api.STORAGE).sort(),
     [
         "forza_nutrition_entries",
         "forza_nutrition_hydration",
+        "forza_nutrition_learned_foods",
         "forza_nutrition_meals",
         "forza_nutrition_settings",
         "forza_nutrition_smart_text_memory"
@@ -227,6 +229,8 @@ assert.ok(
     html.indexOf('<script src="smart-text.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'),
     "Smart Text se carga después de Gym y antes de Nutrition"
 );
+assert.ok(html.includes('<script src="nutrition-fallback.js"></script>'));
+assert.ok(html.indexOf('<script src="nutrition-fallback.js"></script>') < html.indexOf('<script src="nutrition.js"></script>'));
 assert.match(html, /id="nutrition-toast"[^>]+aria-live="polite"/);
 assert.ok(html.includes("Nutrici\u00f3n de hoy"));
 assert.equal(html.includes('id="nutrition-status"'), false);
@@ -255,6 +259,7 @@ assert.ok(source.includes('recognition: draft.recognition ||'));
 const serviceWorker = fs.readFileSync("sw.js", "utf8");
 assert.ok(serviceWorker.includes('"./smart-text-catalog.js"'));
 assert.ok(serviceWorker.includes('"./smart-text.js"'));
+assert.ok(serviceWorker.includes('"./nutrition-fallback.js"'));
 
 const oldNutritionEntry = {
     rawText: "Registro anterior", items: [], calories: 300, protein: 20,

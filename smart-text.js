@@ -125,6 +125,16 @@
         return result;
     }
 
+    function parseExplicitMetricQuantity(value) {
+        const normalized = normalizeText(value);
+        const match = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(g|gr|gramos?)\b/);
+        if (!match) return null;
+        const grams = Number(match[1].replace(",", "."));
+        return Number.isFinite(grams) && grams > 0 && grams <= 3000
+            ? { value: grams, unit: "g", grams, explicit: true, estimated: false }
+            : null;
+    }
+
     function quantityFromText(text, food, rememberedPortion) {
         const normalized = normalizeText(text);
         let value = null;
@@ -370,6 +380,7 @@
         version: 1,
         catalogVersion: CATALOG_VERSION,
         normalizeText,
+        parseExplicitMetricQuantity,
         interpret,
         resolveChoice,
         selectContextCandidate,

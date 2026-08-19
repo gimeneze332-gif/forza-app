@@ -1,4 +1,4 @@
-const CACHE_NAME = "forza-v2-smart-text-calibration-1-photo-food-remote-mock-1-ux-simplification-1-today-meals-1-almonds-1";
+const CACHE_NAME = "forza-v2-smart-text-calibration-1-photo-food-remote-mock-1-ux-simplification-1-today-meals-1-almonds-1-nutrition-fallback-1";
 
 const urlsToCache = [
   "./",
@@ -11,6 +11,7 @@ const urlsToCache = [
   "./smart-text.js",
   "./photo-food-config.js",
   "./photo-food.js",
+  "./nutrition-fallback.js",
   "./nutrition.js",
   "./manifest.json",
   "./img/logo-forza.png"

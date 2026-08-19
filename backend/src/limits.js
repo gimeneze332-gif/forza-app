@@ -1,8 +1,19 @@
 export const LIMITS = Object.freeze({ daily: 10, monthly: 300, perMinute: 4 });
+export const NUTRITION_FALLBACK_LIMITS = Object.freeze({ daily: 10, monthly: 100 });
 
 export function quotaKeys(now = new Date()) {
   const iso = now.toISOString();
   return { day: iso.slice(0, 10), month: iso.slice(0, 7), minute: iso.slice(0, 16) };
+}
+
+export function evaluateNutritionFallbackQuota(state, now = new Date()) {
+  const keys = quotaKeys(now);
+  const daily = state.nutritionFallbackDay === keys.day ? Number(state.nutritionFallbackDaily || 0) : 0;
+  const monthly = state.nutritionFallbackMonth === keys.month ? Number(state.nutritionFallbackMonthly || 0) : 0;
+  if (state.nutritionFallbackBusy) return { allowed: false, status: 429, error: "fallback_in_progress" };
+  if (daily >= NUTRITION_FALLBACK_LIMITS.daily) return { allowed: false, status: 429, error: "fallback_daily_limit" };
+  if (monthly >= NUTRITION_FALLBACK_LIMITS.monthly) return { allowed: false, status: 429, error: "fallback_monthly_limit" };
+  return { allowed: true, keys, next: { daily: daily + 1, monthly: monthly + 1 } };
 }
 
 export function evaluateQuota(state, now = new Date()) {

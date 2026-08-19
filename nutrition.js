@@ -7,7 +7,8 @@
         hydration: "forza_nutrition_hydration",
         settings: "forza_nutrition_settings",
         meals: "forza_nutrition_meals",
-        smartMemory: "forza_nutrition_smart_text_memory"
+        smartMemory: "forza_nutrition_smart_text_memory",
+        learnedFoods: "forza_nutrition_learned_foods"
     });
 
     const CATALOG = [
@@ -31,6 +32,7 @@
     let settings = null;
     let meals = [];
     let smartMemory = null;
+    let learnedFoods = null;
     let draft = null;
     let el = null;
     let closeTimer = null;
@@ -253,6 +255,11 @@
         return api && typeof api.interpret === "function" ? api : null;
     }
 
+    function nutritionFallbackApi() {
+        const api = typeof window !== "undefined" ? window.ForzaNutritionFallback : null;
+        return api && typeof api.resolve === "function" ? api : null;
+    }
+
     function recalculateDraftTotals() {
         const keys = ["calories", "protein", "carbs", "fat"];
         draft.totals = {};
@@ -378,7 +385,10 @@
     function renderRecognitionNote() {
         const recognized = draft.items.map(item => item.name || item.sourceText);
         const warnings = [];
-        if (draft.unrecognized?.length) warnings.push(`No pude reconocer esto: ${draft.unrecognized.join(", ")}.`);
+        if (draft.fallbackFailed) warnings.push("No pude estimar este alimento. Podés completar los nutrientes manualmente.");
+        else if (draft.unrecognized?.length) warnings.push(`No pude reconocer esto: ${draft.unrecognized.join(", ")}.`);
+        if (draft.fallbackKind === "estimated") warnings.push("Estimado · Revisar.");
+        if (draft.fallbackKind === "learned") warnings.push("Aprendido de una comida anterior · Revisar.");
         if (draft.requiresConfirmation) warnings.push("Revisá lo marcado antes de guardar.");
         if (draft.contextType) warnings.push("Confirmá que sea la comida correcta.");
         el.recognitionNote.className = `nutrition-recognition-note${warnings.length ? " warning" : ""}`;
@@ -595,7 +605,7 @@
         });
     }
 
-    function reviewText(text, metadata = {}) {
+    async function reviewText(text, metadata = {}) {
         if (!text) { el.feedback.textContent = "Escribí qué comiste."; el.mealText.focus(); return; }
         const api = smartTextApi();
         if (api) {
@@ -606,6 +616,14 @@
                 draft = { ...parseMealText(text), ...metadata };
             }
         } else draft = { ...parseMealText(text), ...metadata };
+        const fallback = nutritionFallbackApi();
+        const isManualText = !metadata.recognition;
+        if (fallback && api && isManualText && draft.unrecognized?.length) {
+            const resolved = await fallback.resolve(draft, { memory: learnedFoods, parseQuantity: api.parseExplicitMetricQuantity, estimate: fallback.remoteEstimate });
+            draft = { ...resolved.result, smartText: true, fallbackFailed: resolved.failed };
+            const kinds = draft.items.filter(item => item.fallbackKind).map(item => item.fallbackKind);
+            draft.fallbackKind = kinds.includes("estimated") ? "estimated" : kinds.includes("learned") ? "learned" : null;
+        }
         el.originalText.textContent = draft.rawText;
         fillReviewTotals();
         el.reviewFavorite.checked = false;
@@ -615,7 +633,12 @@
         show("review"); el.reviewTitle?.focus({ preventScroll: true });
     }
 
-    function review() { reviewText(el.mealText.value.trim()); }
+    async function review() {
+        if (el.review.disabled) return;
+        el.review.disabled = true; el.feedback.textContent = "Revisando…";
+        try { await reviewText(el.mealText.value.trim()); }
+        finally { el.review.disabled = false; }
+    }
 
     function saveSettings(event) {
         event.preventDefault();
@@ -652,6 +675,14 @@
             throw error;
         }
         const mealName = el.reviewMealName.value.trim();
+        const fallback = nutritionFallbackApi();
+        if (fallback) {
+            const confirmed = { calories: saved.calories, protein: saved.protein, carbs: saved.carbs, fat: saved.fat };
+            const nextMemory = fallback.learn(learnedFoods, draft, confirmed);
+            if (JSON.stringify(nextMemory) !== JSON.stringify(learnedFoods)) {
+                learnedFoods = nextMemory; write(STORAGE.learnedFoods, learnedFoods);
+            }
+        }
         const api = smartTextApi();
         if (mealName && api && draft.items.length) {
             const definition = api.createMealDefinition(mealName, draft.items, {
@@ -698,6 +729,9 @@
         const api = smartTextApi();
         const rawMemory = read(STORAGE.smartMemory, null, value => value !== null && typeof value === "object");
         smartMemory = api ? api.sanitizeMemory(rawMemory) : rawMemory;
+        const fallback = nutritionFallbackApi();
+        const rawLearned = read(STORAGE.learnedFoods, null, value => value !== null && typeof value === "object");
+        learnedFoods = fallback ? fallback.sanitizeMemory(rawLearned) : rawLearned;
         el.open.addEventListener("click", open);
         el.close.addEventListener("click", close);
         el.backdrop.addEventListener("click", close);
@@ -719,7 +753,7 @@
         document.addEventListener("keydown", event => { if (event.key === "Escape" && !el.modal.hidden) close(); });
         try {
             window.ForzaPhotoFood?.init({
-                onProposal(text, metadata) { el.mealText.value = text; reviewText(text, metadata); },
+                onProposal(text, metadata) { el.mealText.value = text; void reviewText(text, metadata); },
                 onFallback() { entryMode("text"); }
             });
         } catch (error) {

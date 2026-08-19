@@ -1,5 +1,5 @@
 import { bearerToken, hashSecret, randomToken } from "./auth.js";
-import { evaluateQuota, LIMITS } from "./limits.js";
+import { evaluateQuota, LIMITS, evaluateNutritionFallbackQuota, NUTRITION_FALLBACK_LIMITS } from "./limits.js";
 
 function json(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } }); }
 
@@ -41,6 +41,17 @@ export class PhotoFoodState {
     if (url.pathname === "/analysis/finish") {
       const updated = { ...current, busy: false }; await this.write(updated);
       return json({ dailyRemaining: Math.max(0, LIMITS.daily - Number(updated.daily || 0)), monthlyRemaining: Math.max(0, LIMITS.monthly - Number(updated.monthly || 0)) });
+    }
+    if (url.pathname === "/nutrition-fallback/start") {
+      if (!authorized) return json({ error: "unauthorized" }, 401);
+      const quota = evaluateNutritionFallbackQuota(current, new Date());
+      if (!quota.allowed) return json({ error: quota.error }, quota.status);
+      await this.write({ ...current, nutritionFallbackDay: quota.keys.day, nutritionFallbackMonth: quota.keys.month, nutritionFallbackDaily: quota.next.daily, nutritionFallbackMonthly: quota.next.monthly, nutritionFallbackBusy: true });
+      return json({ allowed: true, dailyRemaining: NUTRITION_FALLBACK_LIMITS.daily - quota.next.daily, monthlyRemaining: NUTRITION_FALLBACK_LIMITS.monthly - quota.next.monthly });
+    }
+    if (url.pathname === "/nutrition-fallback/finish") {
+      const updated = { ...current, nutritionFallbackBusy: false }; await this.write(updated);
+      return json({ dailyRemaining: Math.max(0, NUTRITION_FALLBACK_LIMITS.daily - Number(updated.nutritionFallbackDaily || 0)), monthlyRemaining: Math.max(0, NUTRITION_FALLBACK_LIMITS.monthly - Number(updated.nutritionFallbackMonthly || 0)) });
     }
     return json({ error: "not_found" }, 404);
   }
