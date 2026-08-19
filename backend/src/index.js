@@ -62,7 +62,7 @@ export function createHandler() {
     if (env.BACKEND_ENABLED !== "true") return json({ error: "backend_disabled", requestId }, 503, cors);
     if (url.pathname === "/health") {
       if (request.method !== "GET") return json({ error: "method_not_allowed", requestId }, 405, cors);
-      return json({ status: "ok", analysisEnabled: env.PHOTO_ANALYSIS_ENABLED === "true", provider: env.PHOTO_FOOD_PROVIDER || "mock" }, 200, cors);
+      return json({ status: "ok", analysisEnabled: env.PHOTO_ANALYSIS_ENABLED === "true", provider: env.PHOTO_FOOD_PROVIDER || "mock", nutritionFallbackEnabled: env.NUTRITION_FALLBACK_ENABLED === "true" }, 200, cors);
     }
     if (url.pathname === "/admin/gemini/models") {
       if (request.method !== "GET") return json({ error: "method_not_allowed", requestId }, 405, cors);

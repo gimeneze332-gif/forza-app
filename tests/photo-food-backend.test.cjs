@@ -32,7 +32,7 @@ class MemoryStorage {
 
   let response = await handle(new Request("https://worker.test/health", { method: "GET", headers: { origin } }), env);
   assert.equal(response.status, 200, "healthcheck disponible con backend habilitado");
-  assert.deepEqual(await response.json(), { status: "ok", analysisEnabled: false, provider: "mock" });
+  assert.deepEqual(await response.json(), { status: "ok", analysisEnabled: false, provider: "mock", nutritionFallbackEnabled: false });
   assert.equal((await call("/photo-food/analyze", { headers: { authorization: "Bearer no-token", "content-type": "image/jpeg" }, body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]) })).status, 503, "análisis apagado responde 503");
   assert.equal((await call("/nutrition-fallback/estimate", { headers: { "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1, foods: [{ clientRef: "u1", label: "merluza", grams: 150 }] }) })).status, 503, "fallback nutricional permanece apagado");
 
