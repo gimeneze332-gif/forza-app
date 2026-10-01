@@ -158,14 +158,17 @@ document.getElementById("trainingDay");
 const exerciseSelect =
 document.getElementById("exercise");
 
-const weightInput =
-document.getElementById("weight");
+const performedSetsList =
+document.getElementById("performedSetsList");
 
-const setsInput =
-document.getElementById("sets");
+const addPerformedSetBtn =
+document.getElementById("addPerformedSet");
 
-const repsInput =
-document.getElementById("reps");
+const copyPreviousSetsBtn =
+document.getElementById("copyPreviousSets");
+
+const previousWorkoutSummary =
+document.getElementById("previousWorkoutSummary");
 
 const notesInput =
 document.getElementById("notes");
@@ -407,6 +410,140 @@ function calculate1RM(
 
 }
 
+function createStableId(prefix = "id") {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `${prefix}-${crypto.randomUUID()}`;
+    }
+
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function parsePositiveNumber(value, allowZero = false) {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const number = Number(String(value).replace(",", "."));
+    if (!Number.isFinite(number) || (allowZero ? number < 0 : number <= 0)) return null;
+    return number;
+}
+
+function getRoutineExerciseName(exercise) {
+    return typeof exercise === "string" ? exercise : String(exercise?.name || "").trim();
+}
+
+function readRoutineExercise(exercise, day = "", index = 0) {
+    if (typeof exercise === "string") {
+        return {
+            id: null,
+            legacyKey: `${day}:${index}:${normalizeExerciseName(exercise)}`,
+            name: exercise,
+            trainingType: null,
+            targetSets: []
+        };
+    }
+
+    return {
+        id: typeof exercise?.id === "string" ? exercise.id : null,
+        name: String(exercise?.name || "").trim(),
+        trainingType: typeof exercise?.trainingType === "string" ? exercise.trainingType : null,
+        targetSets: Array.isArray(exercise?.targetSets)
+            ? exercise.targetSets.map((set, setIndex) => ({
+                id: typeof set?.id === "string" ? set.id : null,
+                order: setIndex + 1,
+                targetWeight: parsePositiveNumber(set?.targetWeight),
+                targetRepsMin: parsePositiveNumber(set?.targetRepsMin),
+                targetRepsMax: parsePositiveNumber(set?.targetRepsMax)
+            }))
+            : []
+    };
+}
+
+function getWorkoutExerciseName(workout) {
+    return String(workout?.exerciseName || workout?.exercise || "").trim();
+}
+
+function getPerformedSets(workout) {
+    if (Array.isArray(workout?.performedSets)) {
+        return workout.performedSets
+            .map((set, index) => ({
+                id: typeof set?.id === "string" ? set.id : null,
+                order: index + 1,
+                targetSetId: typeof set?.targetSetId === "string" ? set.targetSetId : null,
+                weight: parsePositiveNumber(set?.weight),
+                reps: parsePositiveNumber(set?.reps)
+            }))
+            .filter(set => set.weight !== null && set.reps !== null);
+    }
+
+    const weight = parsePositiveNumber(workout?.weight);
+    const reps = parsePositiveNumber(workout?.reps);
+    const setCount = Number.parseInt(workout?.sets, 10);
+    if (weight === null || reps === null || !Number.isInteger(setCount) || setCount <= 0) return [];
+
+    return Array.from({ length: setCount }, (_, index) => ({
+        id: null,
+        order: index + 1,
+        targetSetId: null,
+        weight,
+        reps
+    }));
+}
+
+function getWorkoutVolume(workout) {
+    const sets = getPerformedSets(workout);
+    if (sets.length > 0) return sets.reduce((total, set) => total + set.weight * set.reps, 0);
+    const legacyVolume = Number(workout?.volume);
+    return Number.isFinite(legacyVolume) ? legacyVolume : 0;
+}
+
+function getWorkoutMaxWeight(workout) {
+    return Math.max(0, ...getPerformedSets(workout).map(set => set.weight));
+}
+
+function getWorkoutBestSet(workout) {
+    return getPerformedSets(workout).reduce((best, set) => {
+        if (!best) return set;
+        const score = calculate1RM(set.weight, set.reps);
+        const bestScore = calculate1RM(best.weight, best.reps);
+        return score > bestScore || (score === bestScore && set.weight > best.weight) ? set : best;
+    }, null);
+}
+
+function getWorkoutBestOneRM(workout) {
+    const best = getWorkoutBestSet(workout);
+    return best ? calculate1RM(best.weight, best.reps) : 0;
+}
+
+function getSessionKey(workout) {
+    return workout?.sessionId || `legacy:${workout?.date || "unknown"}`;
+}
+
+function getCurrentSessionId(trainingDayValue) {
+    const latestToday = workouts.slice().reverse().find(workout =>
+        workout.date === getTodayDate() && workout.trainingDay === trainingDayValue && workout.sessionId
+    );
+    if (!latestToday) return createStableId("session");
+    const latestTime = new Date(latestToday.createdAt || 0).getTime();
+    const belongsToOpenSession = Number.isFinite(latestTime) && Date.now() - latestTime <= 4 * 60 * 60 * 1000;
+    return belongsToOpenSession ? latestToday.sessionId : createStableId("session");
+}
+
+function formatPerformedSets(workout) {
+    const sets = getPerformedSets(workout);
+    return sets.length > 0
+        ? sets.map(set => `${set.weight.toLocaleString("es-AR")}×${set.reps.toLocaleString("es-AR")}`).join(" · ")
+        : "Sin series válidas";
+}
+
+function sameExercise(workout, routineExercise) {
+    if (workout?.exerciseId && routineExercise?.id) return workout.exerciseId === routineExercise.id;
+    return normalizeExerciseName(getWorkoutExerciseName(workout)) === normalizeExerciseName(routineExercise?.name);
+}
+
+function getWorkoutExerciseKey(workout) {
+    return workout?.exerciseId
+        ? `id:${workout.exerciseId}`
+        : `name:${normalizeExerciseName(getWorkoutExerciseName(workout))}`;
+}
+
 function escapeHTML(value) {
 
     const entities = {
@@ -560,7 +697,7 @@ function getTotalVolume(){
 
     workouts.forEach(item => {
 
-        total += item.volume;
+        total += getWorkoutVolume(item);
 
     });
 
@@ -576,7 +713,7 @@ function getUniqueExercises(){
 
             workouts.map(
 
-                item => item.exercise
+                item => getWorkoutExerciseKey(item)
 
             )
 
@@ -655,7 +792,20 @@ function renderRoutineList() {
         return;
     }
 
-    exercises.forEach((exercise, index) => {
+    exercises.forEach((storedExercise, index) => {
+
+        const exercise = readRoutineExercise(storedExercise, day, index);
+        const targetSummary = exercise.targetSets.length > 0
+            ? exercise.targetSets.map(set => {
+                const weight = set.targetWeight === null ? "—" : `${set.targetWeight} kg`;
+                const reps = set.targetRepsMin === null
+                    ? "—"
+                    : set.targetRepsMax && set.targetRepsMax !== set.targetRepsMin
+                        ? `${set.targetRepsMin}–${set.targetRepsMax}`
+                        : `${set.targetRepsMin}`;
+                return `${weight} × ${reps}`;
+            }).join(" · ")
+            : "Sin objetivo por serie";
 
         const item = document.createElement("div");
 
@@ -663,7 +813,8 @@ function renderRoutineList() {
 
         item.innerHTML = `
             <div class="routine-name">
-                ${exercise}
+                <strong>${escapeHTML(exercise.name)}</strong>
+                <small>${escapeHTML(targetSummary)}</small>
             </div>
 
             <div class="routine-actions">
@@ -707,9 +858,7 @@ function addExercise() {
     }
 
     const exists = routines[day].some(
-
-        item => item.toLowerCase() === exercise.toLowerCase()
-
+        item => normalizeExerciseName(getRoutineExerciseName(item)) === normalizeExerciseName(exercise)
     );
 
     if (exists) {
@@ -719,7 +868,12 @@ function addExercise() {
         return;
     }
 
-    routines[day].push(exercise);
+    routines[day].push({
+        id: createStableId("exercise"),
+        name: exercise,
+        trainingType: "standard",
+        targetSets: []
+    });
 
     saveRoutines();
 
@@ -739,19 +893,55 @@ function addExercise() {
 
 function editExercise(day, index) {
 
-    const current = routines[day][index];
+    const storedExercise = routines[day][index];
+    const current = readRoutineExercise(storedExercise, day, index);
 
     const updated = prompt(
 
         "Editar ejercicio",
 
-        current
+        current.name
 
     );
 
     if (!updated) return;
 
-    routines[day][index] = updated.trim();
+    const targetInput = prompt(
+        "Objetivos por serie (una por línea: peso,reps mín,reps máx). Dejalo vacío si no querés objetivos.",
+        current.targetSets.map(set => [
+            set.targetWeight ?? "",
+            set.targetRepsMin ?? "",
+            set.targetRepsMax ?? ""
+        ].join(",")).join("\n")
+    );
+    if (targetInput === null) return;
+    const typeInput = prompt(
+        "Tipo informativo: standard, reverse_pyramid, ascending_pyramid u other",
+        current.trainingType || "standard"
+    );
+    if (typeInput === null) return;
+    const allowedTypes = ["standard", "reverse_pyramid", "ascending_pyramid", "other"];
+    const trainingType = allowedTypes.includes(typeInput.trim()) ? typeInput.trim() : "other";
+
+    const targetSets = targetInput.trim() === ""
+        ? []
+        : targetInput.split(/\r?\n/).map((line, setIndex) => {
+            const [weight, min, max] = line.split(",").map(value => value.trim());
+            return {
+                id: current.targetSets[setIndex]?.id || createStableId("target-set"),
+                order: setIndex + 1,
+                targetWeight: parsePositiveNumber(weight),
+                targetRepsMin: parsePositiveNumber(min),
+                targetRepsMax: parsePositiveNumber(max || min)
+            };
+        }).filter(set => set.targetWeight !== null || set.targetRepsMin !== null);
+
+    routines[day][index] = {
+        id: current.id || createStableId("exercise"),
+        name: updated.trim(),
+        trainingType,
+        targetSets
+    };
 
     saveRoutines();
 
@@ -864,13 +1054,13 @@ function updateExerciseOptions() {
         return;
     }
 
-    exercises.forEach(exercise => {
-
-        exerciseSelect.innerHTML += `
-            <option value="${exercise}">
-                ${exercise}
-            </option>
-        `;
+    exercises.forEach((storedExercise, index) => {
+        const exercise = readRoutineExercise(storedExercise, day, index);
+        const option = document.createElement("option");
+        option.value = exercise.id || exercise.legacyKey;
+        option.textContent = exercise.name;
+        option.dataset.routineIndex = String(index);
+        exerciseSelect.appendChild(option);
 
     });
 
@@ -916,12 +1106,15 @@ function updateTodayWorkout() {
         <h3 class="dashboard-routine-title">${escapeHTML(day)}</h3>
         <div class="dashboard-routine-list">
     ` + exercises
-        .map(exercise => `
+        .map((storedExercise, index) => {
+            const exercise = readRoutineExercise(storedExercise, day, index);
+            return `
             <div class="today-item">
                 <span>🏋️</span>
-                ${escapeHTML(exercise)}
+                ${escapeHTML(exercise.name)}
             </div>
-        `)
+        `;
+        })
         .join("") + "</div>";
 
 }
@@ -939,6 +1132,8 @@ if (trainingDay) {
         () => {
 
             updateExerciseOptions();
+
+            renderPerformedSets();
 
             updateTodayWorkout();
 
@@ -958,6 +1153,8 @@ function initializeRoutines() {
 
     updateExerciseOptions();
 
+    renderPerformedSets();
+
     updateTodayWorkout();
 
 }
@@ -967,11 +1164,13 @@ function initializeRoutines() {
 
 function isNewPR(exercise, weight) {
 
+    const exerciseDescriptor = typeof exercise === "string" ? { id: null, name: exercise } : exercise;
+
     const exerciseData =
 
     workouts.filter(
 
-        item => item.exercise === exercise
+        item => sameExercise(item, exerciseDescriptor)
 
     );
 
@@ -984,7 +1183,7 @@ function isNewPR(exercise, weight) {
     const currentPR = Math.max(
 
         ...exerciseData.map(
-            item => item.weight
+            item => getWorkoutMaxWeight(item)
         )
 
     );
@@ -1007,125 +1206,145 @@ ${weight} kg`
 
 }
 
+function getSelectedRoutineExercise() {
+    const day = trainingDay?.value;
+    const index = Number(exerciseSelect?.selectedOptions?.[0]?.dataset?.routineIndex);
+    if (!day || !Number.isInteger(index) || !routines[day]?.[index]) return null;
+    return readRoutineExercise(routines[day][index], day, index);
+}
+
+function getPreviousExerciseWorkout(exercise, excludedId = null) {
+    return workouts.filter(workout => workout.id !== excludedId && sameExercise(workout, exercise))
+        .slice().sort((first, second) => {
+            const dates = (parseWorkoutDate(second.date)?.getTime() || 0) - (parseWorkoutDate(first.date)?.getTime() || 0);
+            return dates || String(second.createdAt || second.id || "").localeCompare(String(first.createdAt || first.id || ""));
+        })[0] || null;
+}
+
+function makeSetRow(set = {}, target = {}, index = 0) {
+    const row = document.createElement("div");
+    row.className = "performed-set-row";
+    row.dataset.setId = set.id || createStableId("performed-set");
+    row.dataset.targetSetId = set.targetSetId || target.id || "";
+    const targetWeight = target.targetWeight ?? null;
+    const targetMin = target.targetRepsMin ?? null;
+    const targetMax = target.targetRepsMax ?? null;
+    const targetText = targetWeight === null && targetMin === null ? "Libre" :
+        `${targetWeight ?? "—"} kg · ${targetMin ?? "—"}${targetMax && targetMax !== targetMin ? `–${targetMax}` : ""}`;
+    row.innerHTML = `
+        <strong class="set-number">${index + 1}</strong>
+        <small class="set-target">${escapeHTML(targetText)}</small>
+        <input class="set-weight" type="number" inputmode="decimal" min="0" step="0.1" aria-label="Peso de la serie ${index + 1}" value="${set.weight ?? targetWeight ?? ""}">
+        <input class="set-reps" type="number" inputmode="numeric" min="1" step="1" aria-label="Repeticiones de la serie ${index + 1}" value="${set.reps ?? ""}">
+        <button type="button" class="btn-icon danger remove-set" aria-label="Eliminar serie ${index + 1}">×</button>`;
+    row.querySelector(".remove-set").addEventListener("click", () => {
+        if (performedSetsList.children.length <= 1) return;
+        row.remove();
+        renumberSetRows();
+    });
+    return row;
+}
+
+function renumberSetRows() {
+    [...performedSetsList?.children || []].forEach((row, index) => {
+        row.querySelector(".set-number").textContent = index + 1;
+    });
+}
+
+function renderPerformedSets(sourceSets = null) {
+    if (!performedSetsList) return;
+    const exercise = getSelectedRoutineExercise();
+    performedSetsList.innerHTML = "";
+    if (!exercise) return;
+    const previous = getPreviousExerciseWorkout(exercise, editingWorkout === null ? null : workouts[editingWorkout]?.id);
+    if (previousWorkoutSummary) previousWorkoutSummary.textContent = previous ? `Anterior: ${formatPerformedSets(previous)}` : "Sin registro anterior.";
+    if (copyPreviousSetsBtn) copyPreviousSetsBtn.disabled = !previous;
+    const sets = sourceSets || (exercise.targetSets.length > 0
+        ? exercise.targetSets.map((target, index) => ({ id: createStableId("performed-set"), targetSetId: target.id, weight: target.targetWeight, reps: null, order: index + 1 }))
+        : [{ id: createStableId("performed-set"), weight: null, reps: null, order: 1 }]);
+    sets.forEach((set, index) => {
+        const target = exercise.targetSets.find(item => item.id && item.id === set.targetSetId) || exercise.targetSets[index] || {};
+        performedSetsList.appendChild(makeSetRow(set, target, index));
+    });
+}
+
+function readPerformedSetsForm() {
+    return [...performedSetsList?.querySelectorAll(".performed-set-row") || []].map((row, index) => ({
+        id: row.dataset.setId || createStableId("performed-set"), order: index + 1,
+        targetSetId: row.dataset.targetSetId || null,
+        weight: parsePositiveNumber(row.querySelector(".set-weight").value),
+        reps: parsePositiveNumber(row.querySelector(".set-reps").value)
+    }));
+}
+
+function addPerformedSet() {
+    if (!performedSetsList) return;
+    const exercise = getSelectedRoutineExercise();
+    const index = performedSetsList.children.length;
+    performedSetsList.appendChild(makeSetRow({}, exercise?.targetSets[index] || {}, index));
+}
+
+function copyPreviousSets() {
+    const exercise = getSelectedRoutineExercise();
+    const previous = exercise ? getPreviousExerciseWorkout(exercise) : null;
+    if (previous) renderPerformedSets(getPerformedSets(previous).map(set => ({ ...set, id: createStableId("performed-set") })));
+}
+
+if (addPerformedSetBtn) addPerformedSetBtn.addEventListener("click", addPerformedSet);
+if (copyPreviousSetsBtn) copyPreviousSetsBtn.addEventListener("click", copyPreviousSets);
+if (exerciseSelect) exerciseSelect.addEventListener("change", () => renderPerformedSets());
+
 /* ==================================================
    GUARDAR ENTRENAMIENTO
 ================================================== */
 
 function saveWorkout(event){
-
     event.preventDefault();
+    const routineExercise = getSelectedRoutineExercise();
+    const exercise = routineExercise?.name || "";
+    const performedSets = readPerformedSetsForm();
+    const notes = notesInput.value.trim();
 
-    const exercise =
-    exerciseSelect.value;
-
-    const weight =
-    Number(weightInput.value);
-
-    const sets =
-    Number(setsInput.value);
-
-    const reps =
-    Number(repsInput.value);
-
-    const notes =
-    notesInput.value.trim();
-
-    if(
-
-        !exercise ||
-        !weight ||
-        !sets ||
-        !reps
-
-    ){
-
-        alert(
-            "Completa todos los campos"
-        );
-
+    if (!exercise || performedSets.length === 0 || performedSets.some(set => set.weight === null || set.reps === null)) {
+        alert("Completá peso y repeticiones de cada serie");
         return;
-
     }
-
     const workout = {
-
-        id: Date.now(),
-
+        schemaVersion: 2,
+        id: createStableId("workout"),
+        sessionId: getCurrentSessionId(trainingDay.value),
+        createdAt: new Date().toISOString(),
         date: getTodayDate(),
-
-        trainingDay:
-        trainingDay.value,
-
+        trainingDay: trainingDay.value,
+        exerciseId: routineExercise.id,
+        exerciseName: exercise,
         exercise,
-
-        weight,
-
-        sets,
-
-        reps,
-
+        performedSets,
         notes,
-
-        volume:
-
-        calculateVolume(
-
-            weight,
-            sets,
-            reps
-
-        )
-
+        volume: performedSets.reduce((total, set) => total + set.weight * set.reps, 0)
     };
 
-    const newPR =
-
-    isNewPR(
-        exercise,
-        weight
-    );
-
-    if(editingWorkout !== null){
-
-        workout.id =
-        workouts[editingWorkout].id;
-
-        workouts[editingWorkout] =
-        workout;
-
+    const newPR = isNewPR(routineExercise, getWorkoutMaxWeight(workout));
+    if (editingWorkout !== null) {
+        const previousRecord = workouts[editingWorkout];
+        workout.id = previousRecord.id;
+        workout.sessionId = previousRecord.sessionId || workout.sessionId;
+        workout.createdAt = previousRecord.createdAt || workout.createdAt;
+        workouts[editingWorkout] = workout;
         editingWorkout = null;
-
-    }
-
-    else{
-
+    } else {
         workouts.push(workout);
-
     }
-
     saveWorkouts();
-
     workoutForm.reset();
-
+    updateExerciseOptions();
+    renderPerformedSets();
     renderHistory();
-
     updateDashboard();
-
     updateQuickStats();
-
     updateExerciseFilter();
-
     updateProgressChart();
-
-    if(newPR){
-
-        showPRAlert(
-            exercise,
-            weight
-        );
-
-    }
-
+    if (newPR) showPRAlert(exercise, getWorkoutMaxWeight(workout));
 }
 
 /* ==================================================
@@ -1149,37 +1368,19 @@ if(workoutForm){
 ================================================== */
 
 function editWorkout(index){
-
-    const workout =
-    workouts[index];
-
-    trainingDay.value =
-    workout.trainingDay;
-
+    const workout = workouts[index];
+    trainingDay.value = workout.trainingDay;
     updateExerciseOptions();
-
-    exerciseSelect.value =
-    workout.exercise;
-
-    weightInput.value =
-    workout.weight;
-
-    setsInput.value =
-    workout.sets;
-
-    repsInput.value =
-    workout.reps;
-
-    notesInput.value =
-    workout.notes || "";
-
-    editingWorkout =
-    index;
-
-    activateTab(
-        "training"
-    );
-
+    const matchingOption = [...exerciseSelect.options].find(option => {
+        const routineIndex = Number(option.dataset.routineIndex);
+        const candidate = readRoutineExercise(routines[workout.trainingDay]?.[routineIndex], workout.trainingDay, routineIndex);
+        return sameExercise(workout, candidate);
+    });
+    if (matchingOption) exerciseSelect.value = matchingOption.value;
+    notesInput.value = workout.notes || "";
+    editingWorkout = index;
+    renderPerformedSets(getPerformedSets(workout));
+    activateTab("training");
 }
 
 /* ==================================================
@@ -1247,9 +1448,9 @@ function updateLastWorkout(){
 
     });
     const workout = sortedWorkouts[sortedWorkouts.length - 1];
-    const sessionWorkouts = getWorkoutsByDate(workout.date);
+    const sessionWorkouts = workouts.filter(item => getSessionKey(item) === getSessionKey(workout));
     const sessionVolume = sessionWorkouts.reduce(
-        (total, item) => total + Number(item.volume || 0),
+        (total, item) => total + getWorkoutVolume(item),
         0
     );
     const workoutDate = parseWorkoutDate(workout.date);
@@ -1286,48 +1487,15 @@ function updateLastWorkout(){
 ================================================== */
 
 function getAllPRs(){
-
-    const records = {};
-
-    workouts.forEach(workout=>{
-
-        if(
-
-            !records[
-                workout.exercise
-            ]
-
-        ){
-
-            records[
-                workout.exercise
-            ] = workout.weight;
-
-        }
-
-        else{
-
-            if(
-
-                workout.weight >
-
-                records[
-                    workout.exercise
-                ]
-
-            ){
-
-                records[
-                    workout.exercise
-                ] = workout.weight;
-
-            }
-
-        }
-
+    const records = new Map();
+    workouts.forEach(workout => {
+        const name = getWorkoutExerciseName(workout);
+        const key = getWorkoutExerciseKey(workout);
+        const weight = getWorkoutMaxWeight(workout);
+        const current = records.get(key);
+        if (!current || weight > current.weight) records.set(key, { name, weight });
     });
-
-    return records;
+    return Object.fromEntries([...records.values()].map(record => [record.name, record.weight]));
 
 }
 
@@ -1420,7 +1588,7 @@ function updateWeeklySummary(){
     weeklySessions.textContent = countWorkoutSessions(weeklyWorkouts);
 
     weeklyVolume.textContent = weeklyWorkouts
-        .reduce((total, workout) => total + Number(workout.volume || 0), 0)
+        .reduce((total, workout) => total + getWorkoutVolume(workout), 0)
         .toLocaleString() + " kg";
 
     if (monthlySessions) {
@@ -1432,7 +1600,7 @@ function updateWeeklySummary(){
     if (monthlyVolume) {
 
         monthlyVolume.textContent = monthlyWorkouts
-            .reduce((total, workout) => total + Number(workout.volume || 0), 0)
+            .reduce((total, workout) => total + getWorkoutVolume(workout), 0)
             .toLocaleString() + " kg";
 
     }
@@ -1452,7 +1620,7 @@ function getWorkoutsInRange(start, end) {
 
 function countWorkoutSessions(records) {
 
-    return new Set(records.map(workout => workout.date)).size;
+    return new Set(records.map(getSessionKey)).size;
 
 }
 
@@ -1472,9 +1640,9 @@ function updateWeeklyComparison() {
     previousStart.setDate(previousStart.getDate() - 7);
 
     const currentVolume = getWorkoutsInRange(currentStart, now)
-        .reduce((total, workout) => total + Number(workout.volume || 0), 0);
+        .reduce((total, workout) => total + getWorkoutVolume(workout), 0);
     const previousVolume = getWorkoutsInRange(previousStart, previousEnd)
-        .reduce((total, workout) => total + Number(workout.volume || 0), 0);
+        .reduce((total, workout) => total + getWorkoutVolume(workout), 0);
 
     if (currentVolume === 0 && previousVolume === 0) {
 
@@ -1523,8 +1691,8 @@ function updateDashboardLatestPR() {
 
     sortedWorkouts.forEach(workout => {
 
-        const exercise = normalizeExerciseName(workout.exercise);
-        const weight = Number(workout.weight || 0);
+        const exercise = getWorkoutExerciseKey(workout);
+        const weight = getWorkoutMaxWeight(workout);
 
         if (!records.has(exercise) || weight > records.get(exercise)) {
 
@@ -1543,8 +1711,8 @@ function updateDashboardLatestPR() {
     }
 
     dashboardLatestPR.innerHTML = `
-        <strong class="dashboard-highlight">${escapeHTML(latestPR.exercise)}</strong>
-        <p>${Number(latestPR.weight).toLocaleString("es-AR")} kg</p>
+        <strong class="dashboard-highlight">${escapeHTML(getWorkoutExerciseName(latestPR))}</strong>
+        <p>${getWorkoutMaxWeight(latestPR).toLocaleString("es-AR")} kg</p>
         <small>${latestPR.date}</small>
     `;
 
@@ -1654,7 +1822,7 @@ function renderHistory() {
 
             workout =>
 
-                workout.exercise
+                getWorkoutExerciseName(workout)
                 .toLowerCase()
                 .includes(exerciseSearch)
 
@@ -1681,7 +1849,7 @@ function renderHistory() {
 
         historyBody.innerHTML = `
             <tr>
-                <td colspan="8">
+                <td colspan="6">
                     Sin registros
                 </td>
             </tr>
@@ -1702,15 +1870,11 @@ function renderHistory() {
 
                     <td>${workout.trainingDay || "-"}</td>
 
-                    <td>${workout.exercise}</td>
+                    <td>${escapeHTML(getWorkoutExerciseName(workout))}</td>
 
-                    <td>${workout.weight}</td>
+                    <td class="history-sets">${escapeHTML(formatPerformedSets(workout))}</td>
 
-                    <td>${workout.sets}</td>
-
-                    <td>${workout.reps}</td>
-
-                    <td>${workout.volume}</td>
+                    <td>${getWorkoutVolume(workout).toLocaleString("es-AR")}</td>
 
                     <td>
 
@@ -1787,7 +1951,7 @@ function renderCalendarDayDetail(date) {
     }
 
     const totalVolume = dayWorkouts.reduce(
-        (total, workout) => total + Number(workout.volume || 0),
+        (total, workout) => total + getWorkoutVolume(workout),
         0
     );
 
@@ -1807,12 +1971,12 @@ function renderCalendarDayDetail(date) {
         session.className = "calendar-session";
 
         const exercise = document.createElement("strong");
-        exercise.textContent = workout.exercise;
+        exercise.textContent = getWorkoutExerciseName(workout);
 
         const data = document.createElement("p");
         data.textContent =
             `${workout.trainingDay || "Rutina"} · ` +
-            `${workout.sets} × ${workout.reps} · ${workout.weight} kg`;
+            formatPerformedSets(workout);
 
         session.append(exercise, data);
 
@@ -1972,8 +2136,12 @@ function getSelectedExerciseRecords(applyPeriod = true) {
 
     if (!selectedExercise) return [];
 
+    const selectedName = normalizeExerciseName(exerciseFilter?.selectedOptions?.[0]?.dataset?.exerciseName);
+
     let records = workouts.filter(
-        workout => normalizeExerciseName(workout.exercise) === selectedExercise
+        workout => getWorkoutExerciseKey(workout) === selectedExercise || (
+            !workout.exerciseId && selectedName && normalizeExerciseName(getWorkoutExerciseName(workout)) === selectedName
+        )
     );
 
     if (applyPeriod && statisticsPeriod?.value !== "all") {
@@ -2011,11 +2179,11 @@ function updateExerciseFilter() {
 
     workouts.forEach(workout => {
 
-        const normalizedName = normalizeExerciseName(workout.exercise);
+        const normalizedName = getWorkoutExerciseKey(workout);
 
         if (normalizedName && !exercises.has(normalizedName)) {
 
-            exercises.set(normalizedName, String(workout.exercise).trim());
+            exercises.set(normalizedName, getWorkoutExerciseName(workout));
 
         }
 
@@ -2034,15 +2202,14 @@ function updateExerciseFilter() {
             const option = document.createElement("option");
             option.value = value;
             option.textContent = label;
+            option.dataset.exerciseName = label;
             exerciseFilter.appendChild(option);
 
         });
 
-    const normalizedSelection = normalizeExerciseName(currentSelection);
+    if (exercises.has(currentSelection)) {
 
-    if (exercises.has(normalizedSelection)) {
-
-        exerciseFilter.value = normalizedSelection;
+        exerciseFilter.value = currentSelection;
 
     }
 
@@ -2079,34 +2246,22 @@ function updateExerciseInfo() {
 
     }
 
-    const exercise = String(records[0].exercise).trim();
-    const maxWeight = Math.max(...records.map(item => Number(item.weight || 0)));
-    const maxVolume = Math.max(...records.map(item => Number(item.volume || 0)));
-    const maxOneRM = Math.max(...records.map(item =>
-        calculate1RM(Number(item.weight || 0), Number(item.reps || 0))
-    ));
-    const averageWeight = records.reduce(
-        (total, item) => total + Number(item.weight || 0),
-        0
-    ) / records.length;
-    const bestSet = records.reduce((best, item) => {
-
-        const score = calculate1RM(
-            Number(item.weight || 0),
-            Number(item.reps || 0)
-        );
-        const bestScore = calculate1RM(
-            Number(best.weight || 0),
-            Number(best.reps || 0)
-        );
-
-        return score > bestScore || (
-            score === bestScore && Number(item.weight) > Number(best.weight)
-        ) ? item : best;
-
-    }, records[0]);
-    const firstWeight = Number(records[0].weight || 0);
-    const lastWeight = Number(records[records.length - 1].weight || 0);
+    const exercise = getWorkoutExerciseName(records[0]);
+    const allSets = records.flatMap(getPerformedSets);
+    const maxWeight = Math.max(0, ...records.map(getWorkoutMaxWeight));
+    const maxVolume = Math.max(0, ...records.map(getWorkoutVolume));
+    const maxOneRM = Math.max(0, ...records.map(getWorkoutBestOneRM));
+    const averageWeight = allSets.length > 0
+        ? allSets.reduce((total, set) => total + set.weight, 0) / allSets.length
+        : 0;
+    const bestSet = allSets.reduce((best, set) => {
+        if (!best) return set;
+        const score = calculate1RM(set.weight, set.reps);
+        const bestScore = calculate1RM(best.weight, best.reps);
+        return score > bestScore || (score === bestScore && set.weight > best.weight) ? set : best;
+    }, null) || { weight: 0, reps: 0 };
+    const firstWeight = getWorkoutMaxWeight(records[0]);
+    const lastWeight = getWorkoutMaxWeight(records[records.length - 1]);
     const variation = firstWeight > 0
         ? ((lastWeight - firstWeight) / firstWeight) * 100
         : 0;
@@ -2203,17 +2358,15 @@ function updateProgressChart() {
     const metricConfig = {
         weight: {
             label: "Peso (kg)",
-            values: data.map(item => Number(item.weight || 0))
+            values: data.map(getWorkoutMaxWeight)
         },
         volume: {
             label: "Volumen (kg)",
-            values: data.map(item => Number(item.volume || 0))
+            values: data.map(getWorkoutVolume)
         },
         oneRM: {
             label: "1RM estimado (kg)",
-            values: data.map(item =>
-                calculate1RM(Number(item.weight || 0), Number(item.reps || 0))
-            )
+            values: data.map(getWorkoutBestOneRM)
         }
     }[metric];
 
@@ -2381,11 +2534,11 @@ function getBestWeightMatching(terms) {
 
     return workouts.reduce((best, workout) => {
 
-        const exercise = normalizeExerciseName(workout.exercise);
+        const exercise = normalizeExerciseName(getWorkoutExerciseName(workout));
         const matches = terms.some(term => exercise.includes(term));
 
         return matches
-            ? Math.max(best, Number(workout.weight || 0))
+            ? Math.max(best, getWorkoutMaxWeight(workout))
             : best;
 
     }, 0);
@@ -2396,7 +2549,7 @@ function getAchievements() {
 
     const sessions = countWorkoutSessions(workouts);
     const totalVolume = workouts.reduce(
-        (total, workout) => total + Number(workout.volume || 0),
+        (total, workout) => total + getWorkoutVolume(workout),
         0
     );
     const consistency = getAchievementConsistency();
@@ -2935,22 +3088,28 @@ function exportCSV() {
         `"${String(value ?? "").replaceAll('"', '""')}"`;
 
     const rows = [[
-        "Fecha", "Dia", "Ejercicio", "Peso",
-        "Series", "Reps", "Volumen", "Notas"
+        "WorkoutId", "SessionId", "Fecha", "Dia", "ExerciseId", "Ejercicio",
+        "Serie", "Peso", "Reps", "VolumenSerie", "VolumenEjercicio", "Notas"
     ]];
 
     workouts.forEach(item => {
 
-        rows.push([
+        const sets = getPerformedSets(item);
+        if (sets.length === 0) sets.push({ order: "", weight: "", reps: "" });
+        sets.forEach((set, index) => rows.push([
+            item.id,
+            item.sessionId || "",
             item.date,
             item.trainingDay,
-            item.exercise,
-            item.weight,
-            item.sets,
-            item.reps,
-            item.volume,
+            item.exerciseId || "",
+            getWorkoutExerciseName(item),
+            set.order || index + 1,
+            set.weight,
+            set.reps,
+            set.weight && set.reps ? set.weight * set.reps : "",
+            getWorkoutVolume(item),
             item.notes || ""
-        ]);
+        ]));
 
     });
 
@@ -3055,7 +3214,7 @@ function backupJSON() {
 
         app: "FORZA",
 
-        schemaVersion: 1,
+        schemaVersion: 2,
 
         exportedAt: new Date().toISOString(),
 
@@ -3160,9 +3319,13 @@ function restoreBackup(event){
             if(
                 !backup ||
                 !Array.isArray(backup.workouts) ||
+                !backup.workouts.every(item => item && typeof item === "object") ||
                 !backup.routines ||
                 typeof backup.routines !== "object" ||
                 !Object.values(backup.routines).every(Array.isArray) ||
+                !Object.values(backup.routines).flat().every(item =>
+                    typeof item === "string" || (item && typeof item === "object" && typeof item.name === "string")
+                ) ||
                 !Array.isArray(backup.bodyMeasurements)
             ){
 

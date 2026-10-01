@@ -732,6 +732,43 @@ tbody tr:hover{
     margin-bottom:0;
 }
 
+.workout-sets-heading{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:18px;
+}
+
+.workout-sets-heading h3{ margin:0 0 5px; }
+.field-hint{ margin:0; color:#6B7280; font-size:14px; }
+.compact-btn{ padding:10px 14px; min-height:44px; }
+.compact-btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+.set-column-labels,
+.performed-set-row{
+    display:grid;
+    grid-template-columns:42px minmax(110px,1fr) minmax(80px,110px) minmax(72px,100px) 44px;
+    gap:10px;
+    align-items:center;
+}
+
+.set-column-labels{
+    padding:0 4px 8px;
+    color:#6B7280;
+    font-size:12px;
+    font-weight:700;
+}
+
+.performed-sets-list{ display:grid; gap:10px; margin-bottom:14px; }
+.performed-set-row{ padding:10px; border:1px solid #E5E7EB; border-radius:16px; background:#F9FAFB; }
+.performed-set-row input{ min-width:0; padding:11px 9px; border-radius:12px; }
+.set-number{ text-align:center; }
+.set-target{ color:#4B5563; line-height:1.35; }
+.routine-name{ display:flex; flex-direction:column; gap:4px; }
+.routine-name small{ color:#6B7280; }
+.history-sets{ white-space:normal; min-width:180px; }
+
 .dashboard-hero{
     display:grid;
     grid-template-columns:minmax(0, 1.25fr) minmax(280px, .75fr);
@@ -1758,6 +1795,21 @@ body.dark-mode input[type="file"]{
 ================================================== */
 
 @media(max-width:480px){
+
+    .workout-sets-heading{ align-items:stretch; flex-direction:column; }
+    .workout-sets-heading .compact-btn{ width:100%; }
+    .set-column-labels{ display:none; }
+    .performed-set-row{
+        grid-template-columns:34px 1fr 1fr 44px;
+        grid-template-areas:
+            "number target target remove"
+            "number weight reps remove";
+    }
+    .set-number{ grid-area:number; }
+    .set-target{ grid-area:target; }
+    .set-weight{ grid-area:weight; }
+    .set-reps{ grid-area:reps; }
+    .remove-set{ grid-area:remove; min-height:44px; }
 
     .backup-reminder{
         align-items:flex-start;

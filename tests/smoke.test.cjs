@@ -47,6 +47,14 @@ function loadApp(initialStorage = {}) {
 }
 
 const clean = loadApp();
+const html = fs.readFileSync("index.html", "utf8");
+const serviceWorker = fs.readFileSync("sw.js", "utf8");
+
+assert.match(html, /id="performedSetsList"/);
+assert.match(html, /id="copyPreviousSets"/);
+assert.match(html, /Series realizadas/);
+assert.doesNotMatch(html, /id="weight"/);
+assert.match(serviceWorker, /gym-sets-v2-1/);
 
 assert.equal(clean.context.calculateVolume(80, 4, 8), 2560);
 assert.equal(clean.context.calculate1RM(80, 8), 101);
@@ -91,10 +99,51 @@ assert.equal(existingData.context.escapeHTML("<Press & banca>"), "&lt;Press &amp
 assert.equal(existingData.context.getWorkoutsByDate("07/08/2026").length, 1);
 assert.equal(existingData.context.getWorkoutsByDate("08/08/2026").length, 0);
 assert.equal(existingData.context.formatCalendarDate(2026, 7, 7), "7/8/2026");
+assert.deepEqual(
+    JSON.parse(JSON.stringify(existingData.context.getPerformedSets({ weight: 80, sets: 3, reps: 8 }))),
+    [
+        { id: null, order: 1, targetSetId: null, weight: 80, reps: 8 },
+        { id: null, order: 2, targetSetId: null, weight: 80, reps: 8 },
+        { id: null, order: 3, targetSetId: null, weight: 80, reps: 8 }
+    ]
+);
+assert.equal(existingData.context.getWorkoutVolume({ weight: 80, sets: 3, reps: 8 }), 1920);
+const v2Workout = {
+    schemaVersion: 2,
+    exerciseId: "exercise-1",
+    exerciseName: "Press inclinado",
+    performedSets: [
+        { id: "set-1", weight: 55, reps: 7 },
+        { id: "set-2", weight: 50, reps: 9 },
+        { id: "set-3", weight: 45, reps: 11 }
+    ]
+};
+assert.equal(existingData.context.getWorkoutVolume(v2Workout), 1330);
+assert.equal(existingData.context.getWorkoutMaxWeight(v2Workout), 55);
+assert.equal(existingData.context.getWorkoutBestSet(v2Workout).weight, 55);
+assert.equal(existingData.context.getWorkoutExerciseName(v2Workout), "Press inclinado");
+assert.equal(existingData.context.getWorkoutExerciseKey(v2Workout), "id:exercise-1");
+assert.equal(existingData.context.getWorkoutExerciseKey({ exercise: " Press Banca " }), "name:press banca");
+assert.equal(existingData.context.sameExercise(v2Workout, { id: "exercise-1", name: "Otro nombre" }), true);
+assert.equal(existingData.context.sameExercise(
+    { exercise: " Press Banca " },
+    { id: null, name: "press banca" }
+), true);
+assert.equal(existingData.context.readRoutineExercise("Remo", "Día 1", 0).id, null);
+assert.equal(existingData.context.readRoutineExercise({
+    id: "exercise-2",
+    name: "Remo",
+    targetSets: [{ targetWeight: 60, targetRepsMin: 8, targetRepsMax: 10 }]
+}).targetSets.length, 1);
 assert.equal(existingData.context.countWorkoutSessions([
     { date: "07/08/2026" },
     { date: "07/08/2026" },
     { date: "08/08/2026" }
+]), 2);
+assert.equal(existingData.context.countWorkoutSessions([
+    { date: "07/08/2026", sessionId: "session-1" },
+    { date: "07/08/2026", sessionId: "session-1" },
+    { date: "07/08/2026", sessionId: "session-2" }
 ]), 2);
 const achievements = existingData.context.getAchievements();
 assert.equal(achievements.length, 12);

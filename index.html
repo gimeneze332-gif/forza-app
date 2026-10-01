@@ -424,44 +424,25 @@
 
         </div>
 
-        <div class="form-grid">
-
-            <div class="card">
-
-                <label>Peso (kg)</label>
-
-                <input
-                    type="number"
-                    id="weight"
-                    required
-                >
-
+        <div class="card workout-sets-card">
+            <div class="workout-sets-heading">
+                <div>
+                    <h3>Series</h3>
+                    <p id="previousWorkoutSummary" class="field-hint">Sin registro anterior.</p>
+                </div>
+                <button type="button" id="copyPreviousSets" class="secondary-btn compact-btn">
+                    Copiar anterior
+                </button>
             </div>
 
-            <div class="card">
-
-                <label>Series</label>
-
-                <input
-                    type="number"
-                    id="sets"
-                    required
-                >
-
+            <div class="set-column-labels" aria-hidden="true">
+                <span>Serie</span><span>Objetivo</span><span>Kg</span><span>Reps</span><span></span>
             </div>
+            <div id="performedSetsList" class="performed-sets-list"></div>
 
-            <div class="card">
-
-                <label>Repeticiones</label>
-
-                <input
-                    type="number"
-                    id="reps"
-                    required
-                >
-
-            </div>
-
+            <button type="button" id="addPerformedSet" class="secondary-btn full-width">
+                + Agregar serie
+            </button>
         </div>
 
         <div class="card">
@@ -528,9 +509,7 @@
                     <th>Fecha</th>
                     <th>Día</th>
                     <th>Ejercicio</th>
-                    <th>Peso</th>
-                    <th>Series</th>
-                    <th>Reps</th>
+                    <th>Series realizadas</th>
                     <th>Volumen</th>
                     <th>Acciones</th>
 
